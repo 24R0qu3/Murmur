@@ -13,8 +13,8 @@ from .transcribe import Transcriber
 from .tray import TrayIcon
 
 _BAR_WIDTH = 24
-_BAR_SCALE = 0.06   # RMS value that fills the bar completely
-_SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_BAR_SCALE = 0.06
+_SPINNER   = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
 def _level_bar(rms: float) -> str:
@@ -23,7 +23,6 @@ def _level_bar(rms: float) -> str:
 
 
 def _run_recording_display(stop: threading.Event, recorder: AudioRecorder):
-    """Animate a live audio-level bar on one line until stop is set."""
     for spin in itertools.cycle(_SPINNER):
         if stop.is_set():
             break
@@ -34,10 +33,11 @@ def _run_recording_display(stop: threading.Event, recorder: AudioRecorder):
 
 def main():
     print("Loading model...")
-    config = load_config()
+    config      = load_config()
     transcriber = Transcriber(config)
-    recorder = AudioRecorder()
+    recorder    = AudioRecorder()
     _transcribe_lock = threading.Lock()
+
     print("Ready.")
     print()
     print(f"  {config.hotkey:<6}  hold to record, release to transcribe + inject")
@@ -46,64 +46,87 @@ def main():
     print(f"  Ctrl+C  exit")
     print()
 
-    # Shared state between on_press / on_release
-    _anim: dict = {}
-    _is_recording = threading.Event()  # set while recording, guards against key-repeat
+    _anim         : dict              = {}
+    _is_recording                     = threading.Event()
+    _shutdown                         = threading.Event()
+    _overlay                          = None   # OverlayWindow | None
+    _root                             = None   # tk.Tk | None
+
+    # ── Thread-safe helpers ───────────────────────────────────────────────────
+
+    def _set_state(state: str):
+        tray.set_state(state)
+        if _root is not None and _overlay is not None:
+            _root.after(0, lambda s=state: _overlay.set_state(s))
+
+    def _push_transcription(text: str):
+        tray.set_state("idle")
+        if _root is not None and _overlay is not None:
+            _root.after(0, lambda t=text: _overlay.add_transcription(t))
+
+    # ── IPC handler ───────────────────────────────────────────────────────────
 
     def ipc_handler(cmd: dict) -> dict:
         command = cmd.get("cmd")
         if command == "status":
             return {"running": True}
         elif command == "listen":
-            timeout = cmd.get("timeout", 30)
+            timeout          = cmd.get("timeout", 30)
             silence_duration = cmd.get("silence_duration", 1.5)
-            countdown = cmd.get("countdown", 0)
+            countdown        = cmd.get("countdown", 0)
             if countdown > 0:
                 for i in range(countdown, 0, -1):
                     print(f"\r  MCP  speak in {i}…   ", end="", flush=True)
                     time.sleep(1)
-            print(f"\r  MCP ● speak now! (max {timeout}s, silence {silence_duration}s)   ", flush=True)
+            print(
+                f"\r  MCP ● speak now! (max {timeout}s, silence {silence_duration}s)   ",
+                flush=True,
+            )
             with _transcribe_lock:
-                audio = recorder.record_until_silence(max_seconds=timeout, silence_duration=silence_duration)
+                audio = recorder.record_until_silence(
+                    max_seconds=timeout, silence_duration=silence_duration,
+                )
                 text = transcriber.transcribe(audio)
-            if text:
-                print(f"\r  MCP → {text}{' ' * 10}")
-            else:
-                print(f"\r  MCP   (nothing recognised){' ' * 10}")
+            print(
+                f"\r  MCP → {text}{' ' * 10}" if text
+                else f"\r  MCP   (nothing recognised){' ' * 10}"
+            )
             return {"text": text}
         else:
             return {"error": f"Unknown command: {command!r}"}
 
+    # ── Hotkey callbacks ──────────────────────────────────────────────────────
+
     def on_press():
         if _is_recording.is_set():
-            return  # ignore OS key-repeat events
+            return
         _is_recording.set()
-        tray.set_state("recording")
+        _set_state("recording")
+        if _overlay is not None and _root is not None:
+            _root.after(0, _overlay.raise_to_front)
         recorder.start_recording()
         stop = threading.Event()
         _anim["stop"] = stop
         threading.Thread(
-            target=_run_recording_display, args=(stop, recorder), daemon=True
+            target=_run_recording_display, args=(stop, recorder), daemon=True,
         ).start()
 
     def _finish():
-        """Stop animation, transcribe, inject. Runs in a worker thread."""
         stop = _anim.pop("stop", None)
         if stop:
             stop.set()
-        tray.set_state("transcribing")
+        _set_state("transcribing")
         print(f"\r◼  Transcribing …{' ' * (_BAR_WIDTH + 12)}", flush=True)
-
         with _transcribe_lock:
             audio = recorder.stop_and_get()
-            text = transcriber.transcribe(audio)
-
+            text  = transcriber.transcribe(audio)
         if text:
             print(f"\r→  {text}{' ' * 10}")
             inject_text(text, delay_ms=config.inject_delay_ms)
+            _push_transcription(text)
         else:
             print(f"\r   (nothing recognised){' ' * 10}")
-        tray.set_state("idle")
+            _set_state("idle")
 
     def on_release():
         if not _is_recording.is_set():
@@ -111,27 +134,76 @@ def main():
         _is_recording.clear()
         threading.Thread(target=_finish, daemon=True).start()
 
+    # ── IPC + hotkey ──────────────────────────────────────────────────────────
+
     ipc_server = IPCServer()
     ipc_server.start(ipc_handler)
 
     hotkey_listener = HotkeyListener(
-        key_name=config.hotkey,
-        on_press=on_press,
-        on_release=on_release,
+        key_name=config.hotkey, on_press=on_press, on_release=on_release,
     )
     hotkey_listener.start()
 
-    _shutdown = threading.Event()
-    signal.signal(signal.SIGINT, lambda *_: _shutdown.set())
-    signal.signal(signal.SIGTERM, lambda *_: _shutdown.set())
+    # ── Tray (started once, here) ─────────────────────────────────────────────
 
     config_path = Path.home() / ".config" / "murmur" / "config.toml"
     tray = TrayIcon(on_quit=_shutdown.set, config_path=config_path)
     if config.tray:
         tray.start()
 
-    while not _shutdown.is_set():
-        _shutdown.wait(timeout=0.5)
+    # ── Overlay + main loop ───────────────────────────────────────────────────
+
+    if config.overlay:
+        try:
+            import tkinter as tk
+            from .overlay import OverlayWindow
+            from .settings_dialog import SettingsDialog
+
+            _root = tk.Tk()
+
+            def _apply_settings(**kw):
+                config.language                = kw.get("language", config.language)
+                config.overlay_raise_on_hotkey = kw.get("overlay_raise_on_hotkey",
+                                                         config.overlay_raise_on_hotkey)
+                transcriber._language          = config.language
+                if _overlay is not None:
+                    _overlay.apply_topmost(
+                        kw.get("overlay_always_on_top", config.overlay_always_on_top)
+                    )
+
+            _overlay = OverlayWindow(
+                _root, config,
+                on_settings=lambda: SettingsDialog(_root, config, config_path, _apply_settings),
+                on_quit=_shutdown.set,
+                get_rms=recorder.get_rms,
+            )
+
+            # Route signals through tkinter thread to avoid race conditions
+            signal.signal(signal.SIGINT,  lambda *_: _root.after(0, _shutdown.set))
+            signal.signal(signal.SIGTERM, lambda *_: _root.after(0, _shutdown.set))
+
+            def _check_shutdown():
+                if _shutdown.is_set():
+                    _root.quit()
+                else:
+                    _root.after(100, _check_shutdown)
+
+            _root.after(100, _check_shutdown)
+            _root.mainloop()
+
+        except Exception as e:
+            print(f"  overlay unavailable ({e}), running headless")
+            signal.signal(signal.SIGINT,  lambda *_: _shutdown.set())
+            signal.signal(signal.SIGTERM, lambda *_: _shutdown.set())
+            while not _shutdown.is_set():
+                _shutdown.wait(timeout=0.5)
+    else:
+        signal.signal(signal.SIGINT,  lambda *_: _shutdown.set())
+        signal.signal(signal.SIGTERM, lambda *_: _shutdown.set())
+        while not _shutdown.is_set():
+            _shutdown.wait(timeout=0.5)
+
+    # ── Shutdown ──────────────────────────────────────────────────────────────
 
     print("\nShutting down.")
     tray.stop()

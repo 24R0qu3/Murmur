@@ -11,6 +11,9 @@ class Config:
     device: str = "cpu"
     inject_delay_ms: int = 0
     tray: bool = True
+    overlay: bool = True
+    overlay_always_on_top: bool = True
+    overlay_raise_on_hotkey: bool = True
 
 
 def load_config() -> Config:
@@ -30,4 +33,7 @@ def load_config() -> Config:
         device=data.get("device", defaults.device),
         inject_delay_ms=data.get("inject_delay_ms", defaults.inject_delay_ms),
         tray=data.get("tray", defaults.tray),
+        overlay=data.get("overlay", defaults.overlay),
+        overlay_always_on_top=data.get("overlay_always_on_top", defaults.overlay_always_on_top),
+        overlay_raise_on_hotkey=data.get("overlay_raise_on_hotkey", defaults.overlay_raise_on_hotkey),
     )
