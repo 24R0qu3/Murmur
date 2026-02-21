@@ -38,9 +38,14 @@ def main():
     _transcribe_lock = threading.Lock()
     print("Ready.")
     print()
+    device_label = transcriber.device
+    if transcriber._auto_detected:
+        device_label += "  (auto-detected)"
     print(f"  {config.hotkey:<6}  hold to record, release to transcribe + inject")
     print(f"  language  {config.language}")
     print(f"  model     {config.model}")
+    print(f"  device    {device_label}")
+    print(f"  compute   {transcriber.compute_type}")
     print(f"  Ctrl+C  exit")
     print()
 

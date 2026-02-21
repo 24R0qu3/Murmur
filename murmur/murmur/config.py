@@ -8,7 +8,8 @@ class Config:
     model: str = "base"
     language: str = "de"
     hotkey: str = "F9"
-    device: str = "cpu"
+    device: str = "auto"       # "auto" | "cpu" | "cuda"
+    compute_type: str = "auto" # "auto" | "int8" | "int8_float32" | "float16" | "float32"
     inject_delay_ms: int = 0
 
 
@@ -27,5 +28,6 @@ def load_config() -> Config:
         language=data.get("language", defaults.language),
         hotkey=data.get("hotkey", defaults.hotkey),
         device=data.get("device", defaults.device),
+        compute_type=data.get("compute_type", defaults.compute_type),
         inject_delay_ms=data.get("inject_delay_ms", defaults.inject_delay_ms),
     )
