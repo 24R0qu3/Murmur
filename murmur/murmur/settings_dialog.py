@@ -10,6 +10,18 @@ except ImportError:
 
 _MODELS  = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
 _DEVICES = ["auto", "cpu", "cuda"]
+_WAKEWORD_MODELS = ["(none)", "hey_jarvis", "alexa", "hey_mycroft", "hey_rhasspy", "ok_google"]
+
+
+def _get_wakeword_models() -> list[str]:
+    """Return available model names; tries openwakeword's own registry first."""
+    try:
+        from openwakeword import MODELS  # available in openwakeword ≥ 0.6
+        return ["(none)"] + sorted(MODELS.keys())
+    except Exception:
+        return list(_WAKEWORD_MODELS)
+
+
 _BG = "#2b2b2b"
 _FG = "#cccccc"
 
@@ -74,21 +86,42 @@ class SettingsDialog(tk.Toplevel):
             row=4, column=0, columnspan=3, sticky="ew", padx=12, pady=6,
         )
 
+        # Wake word
+        ww_current = self._config.wake_word or "(none)"
+        self._wakeword_var = tk.StringVar(value=ww_current)
+        row("Wake word", lambda r: ttk.Combobox(
+            frm, textvariable=self._wakeword_var,
+            values=_get_wakeword_models(), width=14,
+        ).grid(row=r, column=1, sticky="w", **pad), 5)
+
+        # Sensitivity
+        self._wakeword_thresh_var = tk.StringVar(
+            value=f"{self._config.wake_word_threshold:.2f}"
+        )
+        row("Sensitivity", lambda r: ttk.Spinbox(
+            frm, textvariable=self._wakeword_thresh_var,
+            from_=0.10, to=1.00, increment=0.05, format="%.2f", width=7,
+        ).grid(row=r, column=1, sticky="w", **pad), 6)
+
+        ttk.Separator(frm, orient=tk.HORIZONTAL).grid(
+            row=7, column=0, columnspan=3, sticky="ew", padx=12, pady=6,
+        )
+
         # Always on top
         self._topmost_var = tk.BooleanVar(value=self._config.overlay_always_on_top)
         tk.Checkbutton(
             frm, text="Always on top", variable=self._topmost_var,
-        ).grid(row=5, column=0, columnspan=2, sticky="w", padx=12)
+        ).grid(row=8, column=0, columnspan=2, sticky="w", padx=12)
 
         # Raise on hotkey
         self._raise_var = tk.BooleanVar(value=self._config.overlay_raise_on_hotkey)
         tk.Checkbutton(
             frm, text="Bring to front on hotkey press", variable=self._raise_var,
-        ).grid(row=6, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 8))
+        ).grid(row=9, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 8))
 
         # Buttons
         btn_row = tk.Frame(frm)
-        btn_row.grid(row=7, column=0, columnspan=3, pady=(4, 0))
+        btn_row.grid(row=10, column=0, columnspan=3, pady=(4, 0))
         tk.Button(btn_row, text="Save",   command=self._save,   width=10).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_row, text="Cancel", command=self.destroy, width=10).pack(side=tk.LEFT, padx=5)
 
@@ -136,12 +169,19 @@ class SettingsDialog(tk.Toplevel):
     # ── Save ──────────────────────────────────────────────────────────────────
 
     def _save(self):
+        ww_raw = self._wakeword_var.get().strip()
+        try:
+            thresh = max(0.10, min(1.00, float(self._wakeword_thresh_var.get())))
+        except ValueError:
+            thresh = 0.5
         new = dict(
-            model                 = self._model_var.get(),
-            language              = self._lang_var.get().strip(),
-            hotkey                = self._hotkey_var.get(),
-            device                = self._device_var.get(),
-            overlay_always_on_top = self._topmost_var.get(),
+            model                   = self._model_var.get(),
+            language                = self._lang_var.get().strip(),
+            hotkey                  = self._hotkey_var.get(),
+            device                  = self._device_var.get(),
+            wake_word               = "" if ww_raw == "(none)" else ww_raw,
+            wake_word_threshold     = thresh,
+            overlay_always_on_top   = self._topmost_var.get(),
             overlay_raise_on_hotkey = self._raise_var.get(),
         )
 

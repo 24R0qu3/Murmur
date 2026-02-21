@@ -171,38 +171,38 @@ def main():
     )
     hotkey_listener.start()
 
-    # ── Wake word (optional) ───────────────────────────────────────────────────
+    # ── Wake word callbacks (always defined so _apply_settings can reference them)
+
+    def _on_wake_word():
+        if not _is_recording.is_set():
+            on_press()
+            threading.Thread(target=_wake_word_finish, daemon=True).start()
+
+    def _wake_word_finish():
+        with _transcribe_lock:
+            audio = recorder.record_until_silence(
+                max_seconds=30, silence_duration=1.5,
+            )
+            try:
+                text = transcriber.transcribe(audio)
+            except Exception as e:
+                print(f"\r  ERROR: {e}{' ' * 10}")
+                _set_state("idle")
+                _is_recording.clear()
+                return
+        _is_recording.clear()
+        if text:
+            print(f"\r→  {text}{' ' * 10}")
+            inject_text(text, delay_ms=config.inject_delay_ms)
+            _push_transcription(text)
+        else:
+            print(f"\r   (nothing recognised){' ' * 10}")
+            _set_state("idle")
+
+    # ── Wake word initial start (optional) ────────────────────────────────────
 
     if config.wake_word:
         from .wakeword import WakeWordListener
-
-        def _on_wake_word():
-            if not _is_recording.is_set():
-                on_press()
-                # Record until silence then finish, same as IPC path
-                threading.Thread(target=_wake_word_finish, daemon=True).start()
-
-        def _wake_word_finish():
-            with _transcribe_lock:
-                audio = recorder.record_until_silence(
-                    max_seconds=30, silence_duration=1.5,
-                )
-                try:
-                    text = transcriber.transcribe(audio)
-                except Exception as e:
-                    print(f"\r  ERROR: {e}{' ' * 10}")
-                    _set_state("idle")
-                    _is_recording.clear()
-                    return
-            _is_recording.clear()
-            if text:
-                print(f"\r→  {text}{' ' * 10}")
-                inject_text(text, delay_ms=config.inject_delay_ms)
-                _push_transcription(text)
-            else:
-                print(f"\r   (nothing recognised){' ' * 10}")
-                _set_state("idle")
-
         _wakeword_listener = WakeWordListener(
             model_name=config.wake_word,
             threshold=config.wake_word_threshold,
@@ -228,7 +228,7 @@ def main():
             _root = tk.Tk()
 
             def _apply_settings(**kw):
-                nonlocal hotkey_listener
+                nonlocal hotkey_listener, _wakeword_listener
                 config.language                = kw.get("language", config.language)
                 config.overlay_raise_on_hotkey = kw.get("overlay_raise_on_hotkey",
                                                          config.overlay_raise_on_hotkey)
@@ -245,6 +245,22 @@ def main():
                         key_name=config.hotkey, on_press=on_press, on_release=on_release,
                     )
                     hotkey_listener.start()
+                new_wake_word = kw.get("wake_word", config.wake_word)
+                new_threshold = kw.get("wake_word_threshold", config.wake_word_threshold)
+                if new_wake_word != config.wake_word or new_threshold != config.wake_word_threshold:
+                    config.wake_word           = new_wake_word
+                    config.wake_word_threshold = new_threshold
+                    if _wakeword_listener:
+                        recorder.detach_listener(_wakeword_listener.queue)
+                        _wakeword_listener.stop()
+                        _wakeword_listener = None
+                    if new_wake_word:
+                        from .wakeword import WakeWordListener
+                        _wakeword_listener = WakeWordListener(
+                            model_name=new_wake_word, threshold=new_threshold,
+                        )
+                        _wakeword_listener.start(_on_wake_word)
+                        recorder.attach_listener(_wakeword_listener.queue)
 
             def _save_position(x: int, y: int):
                 config.overlay_x = x
