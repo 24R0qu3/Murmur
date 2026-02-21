@@ -120,9 +120,12 @@ def main():
     signal.signal(signal.SIGINT, lambda *_: _shutdown.set())
     signal.signal(signal.SIGTERM, lambda *_: _shutdown.set())
 
-    _shutdown.wait()
+    while not _shutdown.is_set():
+        _shutdown.wait(timeout=0.5)
+
     print("\nShutting down.")
     hotkey_listener.stop()
+    recorder.close()
 
 
 if __name__ == "__main__":

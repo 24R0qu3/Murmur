@@ -114,6 +114,11 @@ class AudioRecorder:
             self._frames = []
         self._recording = True
 
+    def close(self):
+        self._recording = False
+        self._stream.stop()
+        self._stream.close()
+
     def stop_and_get(self) -> np.ndarray:
         self._recording = False
         with self._lock:
