@@ -123,11 +123,15 @@ class SettingsDialog(tk.Toplevel):
         self.unbind("<KeyPress>")
 
     def _center(self, parent):
+        self.withdraw()
         self.update_idletasks()
-        px, py = parent.winfo_x(), parent.winfo_y()
-        pw, ph = parent.winfo_width(), parent.winfo_height()
-        w, h   = self.winfo_width(), self.winfo_height()
-        self.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 2}")
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        w  = self.winfo_reqwidth()
+        h  = self.winfo_reqheight()
+        self.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+        self.attributes("-topmost", True)
+        self.deiconify()
 
     # ── Save ──────────────────────────────────────────────────────────────────
 

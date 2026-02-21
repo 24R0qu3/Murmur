@@ -26,12 +26,14 @@ class OverlayWindow:
         on_settings: Callable,
         on_quit: Callable,
         get_rms: Callable,
+        on_move: Callable = None,
     ):
         self._root = root
         self._config = config
         self._on_settings = on_settings
         self._on_quit = on_quit
         self._get_rms = get_rms
+        self._on_move = on_move
         self._state = "idle"
         self._history: list[str] = []
         self._history_visible = False
@@ -81,8 +83,8 @@ class OverlayWindow:
         # Settings
         self._icon_btn(bar, "⚙", self._on_settings).pack(side=tk.LEFT, padx=(0, 2))
 
-        # Hide (X) — hides overlay, keeps daemon running
-        self._icon_btn(bar, "✕", self._hide, hover_bg="#aa2222").pack(side=tk.LEFT)
+        # Quit (X)
+        self._icon_btn(bar, "✕", self._on_quit, hover_bg="#aa2222").pack(side=tk.LEFT)
 
         # ── History panel (hidden initially) ──────────────────────────────────
         self._hist_frame = tk.Frame(root, bg=_BG_DARK)
@@ -101,6 +103,7 @@ class OverlayWindow:
         for w in (bar, self._status_lbl, self._bar_cv):
             w.bind("<ButtonPress-1>",   self._drag_start)
             w.bind("<B1-Motion>",       self._drag_motion)
+            w.bind("<ButtonRelease-1>", self._drag_end)
 
     def _icon_btn(self, parent, text, cmd, hover_bg="#3b3b3b") -> tk.Button:
         btn = tk.Button(
@@ -117,10 +120,13 @@ class OverlayWindow:
 
     def _place_initial(self):
         self._root.update_idletasks()
-        sw = self._root.winfo_screenwidth()
-        sh = self._root.winfo_screenheight()
-        w  = self._root.winfo_reqwidth()
-        self._root.geometry(f"+{sw - w - 20}+{sh - 80}")
+        if self._config.overlay_x >= 0 and self._config.overlay_y >= 0:
+            self._root.geometry(f"+{self._config.overlay_x}+{self._config.overlay_y}")
+        else:
+            sw = self._root.winfo_screenwidth()
+            sh = self._root.winfo_screenheight()
+            w  = self._root.winfo_reqwidth()
+            self._root.geometry(f"+{sw - w - 20}+{sh - 80}")
 
     def _drag_start(self, event):
         self._drag_x = event.x_root - self._root.winfo_x()
@@ -135,6 +141,10 @@ class OverlayWindow:
         if abs((y + h) - sh) < 40:
             y = sh - h - 2
         self._root.geometry(f"+{x}+{y}")
+
+    def _drag_end(self, event):
+        if self._on_move:
+            self._on_move(self._root.winfo_x(), self._root.winfo_y())
 
     # ── State ─────────────────────────────────────────────────────────────────
 

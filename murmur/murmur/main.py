@@ -119,7 +119,22 @@ def main():
         print(f"\r◼  Transcribing …{' ' * (_BAR_WIDTH + 12)}", flush=True)
         with _transcribe_lock:
             audio = recorder.stop_and_get()
-            text  = transcriber.transcribe(audio)
+            try:
+                text = transcriber.transcribe(audio)
+            except Exception as e:
+                err = str(e).lower()
+                if "cublas" in err or "cuda" in err or "cublaslt" in err:
+                    transcriber.switch_to_cpu()
+                    try:
+                        text = transcriber.transcribe(audio)
+                    except Exception as e2:
+                        print(f"\r  ERROR: {e2}{' ' * 10}")
+                        _set_state("idle")
+                        return
+                else:
+                    print(f"\r  ERROR: {e}{' ' * 10}")
+                    _set_state("idle")
+                    return
         if text:
             print(f"\r→  {text}{' ' * 10}")
             inject_text(text, delay_ms=config.inject_delay_ms)
@@ -162,6 +177,7 @@ def main():
             _root = tk.Tk()
 
             def _apply_settings(**kw):
+                nonlocal hotkey_listener
                 config.language                = kw.get("language", config.language)
                 config.overlay_raise_on_hotkey = kw.get("overlay_raise_on_hotkey",
                                                          config.overlay_raise_on_hotkey)
@@ -170,12 +186,51 @@ def main():
                     _overlay.apply_topmost(
                         kw.get("overlay_always_on_top", config.overlay_always_on_top)
                     )
+                new_hotkey = kw.get("hotkey", config.hotkey)
+                if new_hotkey != config.hotkey:
+                    config.hotkey = new_hotkey
+                    hotkey_listener.stop()
+                    hotkey_listener = HotkeyListener(
+                        key_name=config.hotkey, on_press=on_press, on_release=on_release,
+                    )
+                    hotkey_listener.start()
+
+            def _save_position(x: int, y: int):
+                config.overlay_x = x
+                config.overlay_y = y
+                try:
+                    existing: dict = {}
+                    if config_path.exists():
+                        import tomllib
+                        with open(config_path, "rb") as f:
+                            existing = tomllib.load(f)
+                    existing["overlay_x"] = x
+                    existing["overlay_y"] = y
+                    config_path.parent.mkdir(parents=True, exist_ok=True)
+                    from .settings_dialog import _dump_toml
+                    config_path.write_text(_dump_toml(existing))
+                except Exception:
+                    pass
+
+            _settings_dialog = None
+
+            def _open_settings():
+                nonlocal _settings_dialog
+                if _settings_dialog is not None and _settings_dialog.winfo_exists():
+                    _settings_dialog.lift()
+                    _settings_dialog.focus_force()
+                    return
+                _settings_dialog = SettingsDialog(_root, config, config_path, _apply_settings)
+
+            # Let the tray open the dialog instead of the raw TOML file
+            tray._on_settings = lambda: _root.after(0, _open_settings)
 
             _overlay = OverlayWindow(
                 _root, config,
-                on_settings=lambda: SettingsDialog(_root, config, config_path, _apply_settings),
+                on_settings=_open_settings,
                 on_quit=_shutdown.set,
                 get_rms=recorder.get_rms,
+                on_move=_save_position,
             )
 
             # Route signals through tkinter thread to avoid race conditions

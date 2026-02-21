@@ -32,6 +32,7 @@ class TrayIcon:
     def __init__(self, on_quit: Callable, config_path: Path):
         self._on_quit = on_quit
         self._config_path = config_path
+        self._on_settings: Callable | None = None
         self._icon = None
         self._state = "idle"
 
@@ -77,6 +78,10 @@ class TrayIcon:
                 pass
 
     def _open_config(self):
+        if self._on_settings is not None:
+            self._on_settings()
+            return
+        # Fallback: open the raw TOML file
         path = self._config_path
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
