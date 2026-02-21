@@ -38,6 +38,8 @@ def main():
     print("Ready.")
     print()
     print(f"  {config.hotkey:<6}  hold to record, release to transcribe + inject")
+    print(f"  language  {config.language}")
+    print(f"  model     {config.model}")
     print(f"  Ctrl+C  exit")
     print()
 
@@ -50,9 +52,21 @@ def main():
         if command == "status":
             return {"running": True}
         elif command == "listen":
+            timeout = cmd.get("timeout", 30)
+            silence_duration = cmd.get("silence_duration", 1.5)
+            countdown = cmd.get("countdown", 0)
+            if countdown > 0:
+                for i in range(countdown, 0, -1):
+                    print(f"\r  MCP  speak in {i}…   ", end="", flush=True)
+                    time.sleep(1)
+            print(f"\r  MCP ● speak now! (max {timeout}s, silence {silence_duration}s)   ", flush=True)
             with _transcribe_lock:
-                audio = recorder.record_until_silence()
+                audio = recorder.record_until_silence(max_seconds=timeout, silence_duration=silence_duration)
                 text = transcriber.transcribe(audio)
+            if text:
+                print(f"\r  MCP → {text}{' ' * 10}")
+            else:
+                print(f"\r  MCP   (nothing recognised){' ' * 10}")
             return {"text": text}
         else:
             return {"error": f"Unknown command: {command!r}"}
@@ -103,7 +117,7 @@ def main():
 
     try:
         while True:
-            threading.Event().wait(timeout=1)
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\nShutting down.")
 
