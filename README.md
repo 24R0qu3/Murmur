@@ -1,2 +1,248 @@
 # Murmur
-Murmur – Push-to-talk voice-to-text daemon for developers. Hold a hotkey, speak, release – text appears in your terminal. Local Whisper inference, no cloud, no subscriptions. Cross-platform (Linux/Windows). Optional MCP server for Claude Code integration.
+
+> Push-to-talk voice-to-text for developers — local, fast, no cloud.
+
+Hold a hotkey, speak, release. The transcribed text is injected directly into whatever window is active. Everything runs locally via [faster-whisper](https://github.com/SYSTRAN/faster-whisper); nothing leaves your machine.
+
+An optional companion MCP server lets Claude Code (and any MCP-compatible client) trigger recordings on demand via the `listen()` tool.
+
+---
+
+## Features
+
+- **Push-to-talk** — hold F9 (configurable), speak, release
+- **Fully local** — faster-whisper runs on CPU or CUDA; no API keys, no internet
+- **Cross-platform** — Linux (X11 + Wayland) and Windows
+- **Live audio meter** — visual feedback in the terminal while recording
+- **MCP integration** — expose `listen()` and `status()` tools to Claude Code
+- **Configurable** — model size, language, hotkey, device, inject delay
+
+---
+
+## How it works
+
+```
+F9 press  →  microphone opens
+F9 hold   →  audio buffered  →  live level bar in terminal
+F9 release →  faster-whisper transcribes  →  text injected into active window
+```
+
+IPC path (used by the MCP server):
+
+```
+{"cmd": "listen"}  →  records until silence  →  {"text": "..."}
+{"cmd": "status"}  →  {"running": true}
+```
+
+---
+
+## Requirements
+
+### All platforms
+
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) — `pip install uv` or see uv docs
+
+### Linux
+
+| Display server | Package needed |
+|----------------|----------------|
+| X11            | `xdotool`      |
+| Wayland        | `ydotool`      |
+
+```bash
+# Debian / Ubuntu
+sudo apt install xdotool      # X11
+sudo apt install ydotool      # Wayland
+```
+
+### Windows
+
+Text is injected via the clipboard (Ctrl+V) — no extra tools needed. All native Windows dependencies (`pywin32`, `pyperclip`, `pyautogui`) are installed automatically by uv.
+
+### CUDA (optional)
+
+To run the Whisper model on GPU, install the CUDA-enabled build of CTranslate2 and set `device = "cuda"` in your config file.
+
+---
+
+## Installation & first run
+
+```bash
+git clone https://github.com/24R0qu3/Murmur.git
+cd Murmur/murmur
+uv run murmur
+```
+
+On first run uv creates a virtual environment and downloads the Whisper model (≈150 MB for `base`). Subsequent starts are fast.
+
+Expected output:
+
+```
+Loading model...
+Ready.
+
+  F9      hold to record, release to transcribe + inject
+  Ctrl+C  exit
+```
+
+---
+
+## Configuration
+
+Config file location: **`~/.config/murmur/config.toml`**
+
+Create the file if it doesn't exist. All fields are optional — omitted fields use the defaults shown below.
+
+```toml
+model           = "base"   # Whisper model size (see table below)
+language        = "de"     # ISO 639-1 code, or "" to auto-detect
+hotkey          = "F9"     # Any key name recognised by pynput
+device          = "cpu"    # "cpu" or "cuda"
+inject_delay_ms = 0        # ms to wait before injecting (helps some apps)
+```
+
+### Model sizes
+
+| Model    | Size   | Speed (CPU) | Notes                        |
+|----------|--------|-------------|------------------------------|
+| `tiny`   | ~75 MB | fastest     | Lower accuracy               |
+| `base`   | ~150 MB| fast        | Good balance — **default**   |
+| `small`  | ~480 MB| moderate    |                              |
+| `medium` | ~1.5 GB| slow        | High accuracy                |
+| `large-v3`| ~3 GB | slowest     | Best accuracy, needs GPU     |
+
+### Language codes
+
+Set `language = ""` to let Whisper auto-detect the spoken language (adds ~0.5 s). Otherwise use an [ISO 639-1 code](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes): `"en"`, `"de"`, `"fr"`, `"es"`, `"ja"`, etc.
+
+---
+
+## MCP server — Claude Code integration
+
+The `murmur-mcp` package is a thin MCP server that connects to the running Murmur daemon and exposes two tools:
+
+| Tool | Description |
+|------|-------------|
+| `listen()` | Starts recording; returns transcribed text when silence is detected |
+| `status()` | Returns `{"running": true}` if the daemon is reachable |
+
+### Start the daemon first
+
+```bash
+cd murmur
+uv run murmur
+```
+
+### Add to Claude Code (recommended)
+
+```bash
+claude mcp add murmur -- uv --directory /path/to/Murmur/murmur-mcp run murmur-mcp
+```
+
+Replace `/path/to/Murmur` with the absolute path to your clone.
+
+### Claude Desktop (`claude_desktop_config.json`)
+
+```json
+{
+  "mcpServers": {
+    "murmur": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/Murmur/murmur-mcp",
+        "run",
+        "murmur-mcp"
+      ]
+    }
+  }
+}
+```
+
+The MCP server will print a clear error if the daemon is not running:
+
+```
+ConnectionError: Murmur daemon is not running. Start it with: uv run murmur
+```
+
+---
+
+## Repository structure
+
+```
+Murmur/
+├── murmur/                  # Daemon package
+│   ├── pyproject.toml
+│   └── murmur/
+│       ├── main.py          # Entry point — wires everything together
+│       ├── config.py        # Config loading (~/.config/murmur/config.toml)
+│       ├── audio.py         # Microphone capture (sounddevice + auto device detection)
+│       ├── transcribe.py    # faster-whisper wrapper
+│       ├── inject.py        # Text injection (xdotool / ydotool / clipboard+Ctrl+V)
+│       ├── hotkey.py        # Global hotkey listener (pynput)
+│       └── ipc.py           # JSON-over-socket server (Unix socket / Named Pipe)
+└── murmur-mcp/              # MCP server package
+    ├── pyproject.toml
+    └── murmur_mcp/
+        ├── main.py          # FastMCP entry point
+        └── ipc_client.py    # IPC client (connects to the daemon)
+```
+
+---
+
+## IPC protocol
+
+The daemon listens on:
+- **Linux**: Unix socket at `/tmp/murmur.sock`
+- **Windows**: Named Pipe at `\\.\pipe\murmur`
+
+Messages are newline-terminated JSON:
+
+```jsonc
+// Check status
+→ {"cmd": "status"}
+← {"running": true}
+
+// Record until silence and transcribe
+→ {"cmd": "listen"}
+← {"text": "your transcribed words"}
+
+// Error response
+← {"error": "Unknown command: 'foo'"}
+```
+
+Test on Linux:
+
+```bash
+echo '{"cmd": "status"}' | nc -U /tmp/murmur.sock
+echo '{"cmd": "listen"}' | nc -U /tmp/murmur.sock
+```
+
+---
+
+## Troubleshooting
+
+### Audio device not opening (Windows)
+
+Murmur automatically probes WASAPI and common sample rates at startup and uses the first combination that works. If no device is found, check that your microphone is set as the default recording device in Windows Sound Settings.
+
+### Text not injected (Linux / X11)
+
+Make sure `xdotool` is installed and `$DISPLAY` is set. Some Wayland compositors require `ydotool` and elevated permissions — see the ydotool documentation.
+
+### Model download fails
+
+Faster-whisper downloads models from Hugging Face on first use. If you're offline or behind a proxy, download the model manually and point `model` to the local path in your config.
+
+### Nothing recognised
+
+- Ensure the correct language is set (or use `language = ""` for auto-detect)
+- Try a larger model (`small` or `medium`)
+- Check microphone input levels — if the live bar in the terminal shows no activity, the wrong input device may be selected
+
+---
+
+## License
+
+MIT
