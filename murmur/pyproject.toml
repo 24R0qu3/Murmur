@@ -11,6 +11,8 @@ dependencies = [
     "sounddevice",
     "numpy",
     "pynput",
+    "pystray",
+    "Pillow",
     "pyautogui; sys_platform == 'win32'",
     "pyperclip; sys_platform == 'win32'",
     "pywin32; sys_platform == 'win32'",

@@ -168,3 +168,79 @@ Respect explicit `device = "cpu"` or `device = "cuda"` in config — auto-detect
 - CPU-only `ctranslate2` builds raise `RuntimeError` from `get_cuda_device_count()` — handled by `try/except`.
 - VRAM exhaustion with large models: catch errors in `transcribe()` and suggest `device = "cpu"` or a smaller model.
 - CUDA DLLs must be on `PATH` (standard with NVIDIA driver install) — document in README troubleshooting.
+
+---
+
+## Feature 11: Overlay GUI Panel
+
+**Goal / User Story**
+
+As a developer, I want a compact always-visible floating toolbar (like Windows Magnifier) that shows the live audio level bar, current recording state, last transcription, and a scrollable transcription history — plus a settings dialog to change model, language, hotkey, and device without touching `config.toml`.
+
+**Design**
+
+Compact horizontal strip, always on screen:
+
+```
+┌─────────────────────────────────────┐
+│ ● [████████░░░░░░░░] idle   ⚙  ✕  │
+└─────────────────────────────────────┘
+```
+
+- `●` — coloured status dot (grey = idle, red = recording, amber = transcribing)
+- Level bar — live RMS visualisation while recording
+- Status label — "idle" / "recording" / "transcribing"
+- `⚙` — opens settings dialog
+- `✕` — hides window (daemon keeps running; restore via tray icon)
+- Expandable downward to show scrollable transcription history
+
+**Behaviour**
+
+- Draggable: click and drag anywhere on the bar to reposition
+- Dockable: snaps to the bottom edge of the screen (above taskbar) when dragged close
+- Always-on-top: toggleable via settings; also a separate setting to auto-raise on F9 press
+- Always visible by default
+
+**Settings Dialog (separate window)**
+
+| Setting | Widget |
+|---|---|
+| Model | Dropdown: tiny / base / small / medium / large-v2 / large-v3 |
+| Language | Text entry (ISO code, e.g. `en`, `de`) |
+| Hotkey | Click-to-bind field |
+| Device | Dropdown: auto / cpu / cuda |
+| Always on top | Checkbox |
+| Raise on F9 | Checkbox |
+
+Saving writes values back to `~/.config/murmur/config.toml` and reloads the daemon config (model/device changes require restart — show a notice).
+
+**Transcription History Panel (expandable)**
+
+- Expands below the toolbar on click
+- Scrollable list of past transcriptions with timestamps
+- Click any entry to copy it to clipboard
+
+**Framework**
+
+`tkinter` — built-in, no extra dependency, cross-platform (Windows + Linux).
+
+**Key Architectural Note**
+
+tkinter requires its mainloop to run on the main thread. The current main thread runs a `_shutdown.wait()` loop. This must change:
+- Main thread runs `root.mainloop()`
+- Shutdown: signal handler calls `root.after(0, root.quit)` instead of `_shutdown.set()`
+- State updates from audio/hotkey threads must go through `root.after(0, callback)` (tkinter is not thread-safe)
+
+**Files to Create or Modify**
+
+- `murmur/murmur/overlay.py` — **new** — `OverlayWindow` class (toolbar + history panel)
+- `murmur/murmur/settings_dialog.py` — **new** — `SettingsDialog` class
+- `murmur/murmur/main.py` — replace `_shutdown.wait()` loop with `root.mainloop()`; thread-safe state update helpers
+- `murmur/murmur/config.py` — add `overlay: bool = True`, `overlay_always_on_top: bool = True`, `overlay_raise_on_hotkey: bool = True`
+
+**Risks / Open Questions**
+
+- tkinter on Linux requires `python3-tk` (system package). Not always pre-installed. Should degrade gracefully if unavailable (try/except ImportError).
+- Hot-reload of model/device from settings is slow — show "Restart required" notice rather than reloading live.
+- Docking to taskbar requires knowing the taskbar height. On Windows, query via `ctypes` (`SystemParametersInfo`). On Linux, approximate with screen height minus a fixed offset or use `_NET_WORKAREA` via `xprop`.
+- The `overlay_raise_on_hotkey` setting needs the overlay to call `root.lift()` + `root.attributes("-topmost", True)` on F9 press — must be done via `root.after()` from the hotkey thread.

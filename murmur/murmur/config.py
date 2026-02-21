@@ -11,6 +11,12 @@ class Config:
     device: str = "auto"       # "auto" | "cpu" | "cuda"
     compute_type: str = "auto" # "auto" | "int8" | "int8_float32" | "float16" | "float32"
     inject_delay_ms: int = 0
+    tray: bool = True
+    overlay: bool = True
+    overlay_always_on_top: bool = True
+    overlay_raise_on_hotkey: bool = True
+    overlay_x: int = -1
+    overlay_y: int = -1
 
 
 def load_config() -> Config:
@@ -30,4 +36,10 @@ def load_config() -> Config:
         device=data.get("device", defaults.device),
         compute_type=data.get("compute_type", defaults.compute_type),
         inject_delay_ms=data.get("inject_delay_ms", defaults.inject_delay_ms),
+        tray=data.get("tray", defaults.tray),
+        overlay=data.get("overlay", defaults.overlay),
+        overlay_always_on_top=data.get("overlay_always_on_top", defaults.overlay_always_on_top),
+        overlay_raise_on_hotkey=data.get("overlay_raise_on_hotkey", defaults.overlay_raise_on_hotkey),
+        overlay_x=data.get("overlay_x", defaults.overlay_x),
+        overlay_y=data.get("overlay_y", defaults.overlay_y),
     )
