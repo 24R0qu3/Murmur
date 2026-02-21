@@ -10,6 +10,7 @@ class Config:
     hotkey: str = "F9"
     device: str = "cpu"
     inject_delay_ms: int = 0
+    tray: bool = True
 
 
 def load_config() -> Config:
@@ -28,4 +29,5 @@ def load_config() -> Config:
         hotkey=data.get("hotkey", defaults.hotkey),
         device=data.get("device", defaults.device),
         inject_delay_ms=data.get("inject_delay_ms", defaults.inject_delay_ms),
+        tray=data.get("tray", defaults.tray),
     )

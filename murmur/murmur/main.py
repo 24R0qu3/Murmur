@@ -2,6 +2,7 @@ import itertools
 import signal
 import threading
 import time
+from pathlib import Path
 
 from .audio import AudioRecorder
 from .config import load_config
@@ -9,6 +10,7 @@ from .hotkey import HotkeyListener
 from .inject import inject_text
 from .ipc import IPCServer
 from .transcribe import Transcriber
+from .tray import TrayIcon
 
 _BAR_WIDTH = 24
 _BAR_SCALE = 0.06   # RMS value that fills the bar completely
@@ -76,6 +78,7 @@ def main():
         if _is_recording.is_set():
             return  # ignore OS key-repeat events
         _is_recording.set()
+        tray.set_state("recording")
         recorder.start_recording()
         stop = threading.Event()
         _anim["stop"] = stop
@@ -88,6 +91,7 @@ def main():
         stop = _anim.pop("stop", None)
         if stop:
             stop.set()
+        tray.set_state("transcribing")
         print(f"\r◼  Transcribing …{' ' * (_BAR_WIDTH + 12)}", flush=True)
 
         with _transcribe_lock:
@@ -99,6 +103,7 @@ def main():
             inject_text(text, delay_ms=config.inject_delay_ms)
         else:
             print(f"\r   (nothing recognised){' ' * 10}")
+        tray.set_state("idle")
 
     def on_release():
         if not _is_recording.is_set():
@@ -120,10 +125,16 @@ def main():
     signal.signal(signal.SIGINT, lambda *_: _shutdown.set())
     signal.signal(signal.SIGTERM, lambda *_: _shutdown.set())
 
+    config_path = Path.home() / ".config" / "murmur" / "config.toml"
+    tray = TrayIcon(on_quit=_shutdown.set, config_path=config_path)
+    if config.tray:
+        tray.start()
+
     while not _shutdown.is_set():
         _shutdown.wait(timeout=0.5)
 
     print("\nShutting down.")
+    tray.stop()
     hotkey_listener.stop()
     recorder.close()
 
