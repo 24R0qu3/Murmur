@@ -1,4 +1,5 @@
 import itertools
+import signal
 import threading
 import time
 
@@ -115,11 +116,16 @@ def main():
     )
     hotkey_listener.start()
 
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\nShutting down.")
+    _shutdown = threading.Event()
+    signal.signal(signal.SIGINT, lambda *_: _shutdown.set())
+    signal.signal(signal.SIGTERM, lambda *_: _shutdown.set())
+
+    while not _shutdown.is_set():
+        _shutdown.wait(timeout=0.5)
+
+    print("\nShutting down.")
+    hotkey_listener.stop()
+    recorder.close()
 
 
 if __name__ == "__main__":
