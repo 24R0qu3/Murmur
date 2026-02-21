@@ -37,3 +37,7 @@ class HotkeyListener:
         )
         self._listener.daemon = True
         self._listener.start()
+
+    def stop(self):
+        if self._listener is not None:
+            self._listener.stop()
