@@ -17,6 +17,8 @@ class Config:
     overlay_raise_on_hotkey: bool = True
     overlay_x: int = -1
     overlay_y: int = -1
+    wake_word: str = ""
+    wake_word_threshold: float = 0.5
 
 
 def load_config() -> Config:
@@ -42,4 +44,6 @@ def load_config() -> Config:
         overlay_raise_on_hotkey=data.get("overlay_raise_on_hotkey", defaults.overlay_raise_on_hotkey),
         overlay_x=data.get("overlay_x", defaults.overlay_x),
         overlay_y=data.get("overlay_y", defaults.overlay_y),
+        wake_word=data.get("wake_word", defaults.wake_word),
+        wake_word_threshold=data.get("wake_word_threshold", defaults.wake_word_threshold),
     )

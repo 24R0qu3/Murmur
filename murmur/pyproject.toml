@@ -18,5 +18,8 @@ dependencies = [
     "pywin32; sys_platform == 'win32'",
 ]
 
+[project.optional-dependencies]
+wakeword = ["openwakeword"]
+
 [project.scripts]
 murmur = "murmur.main:main"

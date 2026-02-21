@@ -1,3 +1,4 @@
+import queue
 import sys
 import time
 import threading
@@ -86,6 +87,7 @@ class AudioRecorder:
         self._frames: list[np.ndarray] = []
         self._lock = threading.Lock()
         self._recording = False
+        self._listeners: list["queue.Queue"] = []
         self._stream = sd.InputStream(
             samplerate=_RATE,
             channels=CHANNELS,
@@ -95,10 +97,29 @@ class AudioRecorder:
         )
         self._stream.start()
 
+    def attach_listener(self, q: "queue.Queue") -> None:
+        """Feed raw audio chunks to *q* for wake-word detection."""
+        with self._lock:
+            if q not in self._listeners:
+                self._listeners.append(q)
+
+    def detach_listener(self, q: "queue.Queue") -> None:
+        with self._lock:
+            try:
+                self._listeners.remove(q)
+            except ValueError:
+                pass
+
     def _callback(self, indata, frames, time_info, status):
-        if self._recording:
-            with self._lock:
+        chunk = indata[:, 0].copy()   # flatten to 1-D float32
+        with self._lock:
+            if self._recording:
                 self._frames.append(indata.copy())
+            for q in self._listeners:
+                try:
+                    q.put_nowait(chunk)
+                except Exception:
+                    pass
 
     def get_rms(self) -> float:
         """Return RMS of the most recent audio chunk (0.0 if nothing captured yet)."""

@@ -48,6 +48,8 @@ def main():
     print(f"  model     {config.model}")
     print(f"  device    {device_label}")
     print(f"  compute   {transcriber.compute_type}")
+    if config.wake_word:
+        print(f"  wake word \"{config.wake_word}\"")
     print(f"  Ctrl+C  exit")
     print()
 
@@ -56,6 +58,7 @@ def main():
     _shutdown                         = threading.Event()
     _overlay                          = None   # OverlayWindow | None
     _root                             = None   # tk.Tk | None
+    _wakeword_listener                = None   # WakeWordListener | None
 
     # ── Thread-safe helpers ───────────────────────────────────────────────────
 
@@ -87,11 +90,15 @@ def main():
                 f"\r  MCP ● speak now! (max {timeout}s, silence {silence_duration}s)   ",
                 flush=True,
             )
+            if _wakeword_listener:
+                _wakeword_listener.pause()
             with _transcribe_lock:
                 audio = recorder.record_until_silence(
                     max_seconds=timeout, silence_duration=silence_duration,
                 )
                 text = transcriber.transcribe(audio)
+            if _wakeword_listener:
+                _wakeword_listener.resume()
             print(
                 f"\r  MCP → {text}{' ' * 10}" if text
                 else f"\r  MCP   (nothing recognised){' ' * 10}"
@@ -163,6 +170,45 @@ def main():
         key_name=config.hotkey, on_press=on_press, on_release=on_release,
     )
     hotkey_listener.start()
+
+    # ── Wake word (optional) ───────────────────────────────────────────────────
+
+    if config.wake_word:
+        from .wakeword import WakeWordListener
+
+        def _on_wake_word():
+            if not _is_recording.is_set():
+                on_press()
+                # Record until silence then finish, same as IPC path
+                threading.Thread(target=_wake_word_finish, daemon=True).start()
+
+        def _wake_word_finish():
+            with _transcribe_lock:
+                audio = recorder.record_until_silence(
+                    max_seconds=30, silence_duration=1.5,
+                )
+                try:
+                    text = transcriber.transcribe(audio)
+                except Exception as e:
+                    print(f"\r  ERROR: {e}{' ' * 10}")
+                    _set_state("idle")
+                    _is_recording.clear()
+                    return
+            _is_recording.clear()
+            if text:
+                print(f"\r→  {text}{' ' * 10}")
+                inject_text(text, delay_ms=config.inject_delay_ms)
+                _push_transcription(text)
+            else:
+                print(f"\r   (nothing recognised){' ' * 10}")
+                _set_state("idle")
+
+        _wakeword_listener = WakeWordListener(
+            model_name=config.wake_word,
+            threshold=config.wake_word_threshold,
+        )
+        _wakeword_listener.start(_on_wake_word)
+        recorder.attach_listener(_wakeword_listener.queue)
 
     # ── Tray (started once, here) ─────────────────────────────────────────────
 
@@ -266,6 +312,9 @@ def main():
     # ── Shutdown ──────────────────────────────────────────────────────────────
 
     print("\nShutting down.")
+    if _wakeword_listener:
+        recorder.detach_listener(_wakeword_listener.queue)
+        _wakeword_listener.stop()
     tray.stop()
     hotkey_listener.stop()
     recorder.close()
