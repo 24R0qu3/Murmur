@@ -41,9 +41,15 @@ class WakeWordListener:
         openwakeword is not installed."""
         try:
             import openwakeword
-            openwakeword.utils.download_models()
             from openwakeword.model import Model
-            self._model = Model(wakeword_models=[self._model_name], inference_framework="onnx")
+            # v0.4+: Model takes file paths; resolve name → path via the built-in registry
+            entry = openwakeword.models.get(self._model_name, {})
+            model_path = entry.get("model_path", self._model_name)
+            self._model = Model(wakeword_model_paths=[model_path])
+        except ModuleNotFoundError:
+            print("  Wake word unavailable: openwakeword not installed"
+                  "  (pip install openwakeword)")
+            return False
         except Exception as e:
             print(f"  Wake word unavailable: {e}")
             return False
@@ -53,8 +59,7 @@ class WakeWordListener:
         self._paused.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
-        model_keys = list(self._model.models.keys()) if hasattr(self._model, "models") else ["?"]
-        print(f"  Wake word  \"{self._model_name}\"  loaded  keys={model_keys}  threshold={self._threshold}")
+        print(f"  Wake word  \"{self._model_name}\"  (threshold {self._threshold})")
         return True
 
     def stop(self):
@@ -88,9 +93,10 @@ class WakeWordListener:
 
     def _run(self):
         import numpy as np
+        from .audio import _RATE, _resample
 
-        last_detection  = 0.0
-        buf             = np.zeros(0, dtype=np.float32)
+        last_detection = 0.0
+        buf = np.zeros(0, dtype=np.float32)
 
         while not self._stop_event.is_set():
             try:
@@ -103,6 +109,9 @@ class WakeWordListener:
             if self._paused.is_set():
                 continue
 
+            # openwakeword requires 16 kHz; resample if the stream runs at a different rate
+            chunk = _resample(chunk, _RATE)
+
             # Accumulate into _CHUNK_SAMPLES-sized windows
             buf = np.concatenate([buf, chunk])
             while len(buf) >= _CHUNK_SAMPLES:
@@ -110,17 +119,14 @@ class WakeWordListener:
                 buf    = buf[_CHUNK_SAMPLES:]
 
                 try:
-                    # openwakeword expects int16 audio, not float32
-                    window_int16 = (np.clip(window, -1.0, 1.0) * 32767).astype(np.int16)
-                    scores = self._model.predict(window_int16)
+                    # openwakeword expects int16 PCM [-32768, 32767]
+                    scores = self._model.predict((window * 32767).astype(np.int16))
                 except Exception:
                     continue
 
-                confidence = max(scores.values(), default=0.0)
-
+                confidence = max(scores.get(k, 0.0) for k in scores)
                 now = time.monotonic()
                 if confidence >= self._threshold and (now - last_detection) >= _COOLDOWN_SECONDS:
                     last_detection = now
-                    print(f"  Wake word  DETECTED  confidence={confidence:.3f}", flush=True)
                     if self._on_detected and not self._paused.is_set():
                         self._on_detected()
