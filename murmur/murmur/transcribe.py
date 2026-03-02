@@ -42,6 +42,12 @@ def _add_cuda_dll_dirs() -> None:
 # Must run before faster_whisper / ctranslate2 are imported
 _add_cuda_dll_dirs()
 
+try:
+    import onnxruntime as _ort
+    _ort.set_default_logger_severity(3)  # ERROR only — suppress GPU discovery warnings
+except Exception:
+    pass
+
 from faster_whisper import WhisperModel  # noqa: E402
 
 
@@ -74,11 +80,26 @@ class Transcriber:
         self.device = _resolve_device(config.device)
         self.compute_type = _resolve_compute_type(config.compute_type, self.device)
         self._auto_detected = config.device == "auto"
-        self._model = WhisperModel(
-            config.model,
-            device=self.device,
-            compute_type=self.compute_type,
-        )
+        try:
+            self._model = WhisperModel(
+                config.model,
+                device=self.device,
+                compute_type=self.compute_type,
+            )
+        except ValueError as exc:
+            if "compute type" in str(exc).lower() and self.compute_type == "float16":
+                print(
+                    "  WARNING: float16 not supported on this device — falling back to int8_float32.\n"
+                    "  Set compute_type = \"int8_float32\" in config.toml to silence this."
+                )
+                self.compute_type = "int8_float32"
+                self._model = WhisperModel(
+                    config.model,
+                    device=self.device,
+                    compute_type=self.compute_type,
+                )
+            else:
+                raise
 
     def switch_to_cpu(self):
         """Reload the model on CPU (called after a CUDA failure)."""

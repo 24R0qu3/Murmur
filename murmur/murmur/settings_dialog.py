@@ -16,10 +16,14 @@ _WAKEWORD_MODELS = ["(none)", "hey_jarvis", "alexa", "hey_mycroft", "hey_rhasspy
 def _get_wakeword_models() -> list[str]:
     """Return available model names; tries openwakeword's own registry first."""
     try:
-        from openwakeword import MODELS  # available in openwakeword ≥ 0.6
-        return ["(none)"] + sorted(MODELS.keys())
+        import openwakeword
+        # openwakeword ≥ 0.6 exposes MODELS; 0.4.x exposes models (lowercase)
+        registry = getattr(openwakeword, "MODELS", None) or getattr(openwakeword, "models", None)
+        if registry:
+            return ["(none)"] + sorted(registry.keys())
     except Exception:
-        return list(_WAKEWORD_MODELS)
+        pass
+    return list(_WAKEWORD_MODELS)
 
 
 _BG = "#2b2b2b"

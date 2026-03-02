@@ -41,9 +41,15 @@ class WakeWordListener:
         openwakeword is not installed."""
         try:
             import openwakeword
-            openwakeword.utils.download_models()
             from openwakeword.model import Model
-            self._model = Model(wakeword_models=[self._model_name], inference_framework="onnx")
+            # v0.4+: Model takes file paths; resolve name → path via the built-in registry
+            entry = openwakeword.models.get(self._model_name, {})
+            model_path = entry.get("model_path", self._model_name)
+            self._model = Model(wakeword_model_paths=[model_path])
+        except ModuleNotFoundError:
+            print("  Wake word unavailable: openwakeword not installed"
+                  "  (pip install openwakeword)")
+            return False
         except Exception as e:
             print(f"  Wake word unavailable: {e}")
             return False
@@ -87,6 +93,7 @@ class WakeWordListener:
 
     def _run(self):
         import numpy as np
+        from .audio import _RATE, _resample
 
         last_detection = 0.0
         buf = np.zeros(0, dtype=np.float32)
@@ -102,6 +109,9 @@ class WakeWordListener:
             if self._paused.is_set():
                 continue
 
+            # openwakeword requires 16 kHz; resample if the stream runs at a different rate
+            chunk = _resample(chunk, _RATE)
+
             # Accumulate into _CHUNK_SAMPLES-sized windows
             buf = np.concatenate([buf, chunk])
             while len(buf) >= _CHUNK_SAMPLES:
@@ -109,7 +119,8 @@ class WakeWordListener:
                 buf    = buf[_CHUNK_SAMPLES:]
 
                 try:
-                    scores = self._model.predict(window)
+                    # openwakeword expects int16 PCM [-32768, 32767]
+                    scores = self._model.predict((window * 32767).astype(np.int16))
                 except Exception:
                     continue
 
