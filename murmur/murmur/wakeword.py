@@ -40,12 +40,13 @@ class WakeWordListener:
         """Load model and start background detection thread.  Returns False if
         openwakeword is not installed."""
         try:
-            import openwakeword
             from openwakeword.model import Model
-            # v0.4+: Model takes file paths; resolve name → path via the built-in registry
-            entry = openwakeword.models.get(self._model_name, {})
-            model_path = entry.get("model_path", self._model_name)
-            self._model = Model(wakeword_model_paths=[model_path])
+            # Pass as a named built-in model or as a file path depending on the value
+            name = self._model_name
+            if name.endswith(".onnx") or name.endswith(".tflite") or "/" in name or "\\" in name:
+                self._model = Model(wakeword_model_paths=[name])
+            else:
+                self._model = Model(wakeword_models=[name])
         except ModuleNotFoundError:
             print("  Wake word unavailable: openwakeword not installed"
                   "  (pip install openwakeword)")
