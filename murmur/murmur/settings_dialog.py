@@ -33,11 +33,13 @@ class SettingsDialog(tk.Toplevel):
         config,
         config_path: Path,
         on_save: Callable,
+        on_recenter: Callable = None,
     ):
         super().__init__(parent)
         self._config      = config
         self._config_path = config_path
         self._on_save     = on_save
+        self._on_recenter = on_recenter
         self._binding     = False
 
         self.title("Murmur Settings")
@@ -124,6 +126,8 @@ class SettingsDialog(tk.Toplevel):
         btn_row.grid(row=10, column=0, columnspan=3, pady=(4, 0))
         tk.Button(btn_row, text="Save",   command=self._save,   width=10).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_row, text="Cancel", command=self.destroy, width=10).pack(side=tk.LEFT, padx=5)
+        if self._on_recenter:
+            tk.Button(btn_row, text="Recenter overlay", command=self._on_recenter, width=16).pack(side=tk.LEFT, padx=5)
 
     def _hotkey_row(self, parent, row):
         self._hotkey_entry = tk.Entry(

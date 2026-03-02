@@ -294,7 +294,10 @@ def main():
                     _settings_dialog.lift()
                     _settings_dialog.focus_force()
                     return
-                _settings_dialog = SettingsDialog(_root, config, config_path, _apply_settings)
+                _settings_dialog = SettingsDialog(
+                    _root, config, config_path, _apply_settings,
+                    on_recenter=_overlay.recenter,
+                )
 
             # Let the tray open the dialog instead of the raw TOML file
             tray._on_settings = lambda: _root.after(0, _open_settings)

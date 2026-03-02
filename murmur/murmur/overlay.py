@@ -206,6 +206,18 @@ class OverlayWindow:
 
     # ── Hide / show ───────────────────────────────────────────────────────────
 
+    def recenter(self):
+        self._root.update_idletasks()
+        sw = self._root.winfo_screenwidth()
+        sh = self._root.winfo_screenheight()
+        w  = self._root.winfo_width()
+        h  = self._root.winfo_height()
+        x  = (sw - w) // 2
+        y  = (sh - h) // 2
+        self._root.geometry(f"+{x}+{y}")
+        if self._on_move:
+            self._on_move(x, y)
+
     def _hide(self):
         self._root.withdraw()
 
