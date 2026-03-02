@@ -111,15 +111,18 @@ class AudioRecorder:
                 pass
 
     def _callback(self, indata, frames, time_info, status):
-        chunk = indata[:, 0].copy()   # flatten to 1-D float32
+        chunk_raw = indata[:, 0].copy()   # flatten to 1-D float32, at _RATE
         with self._lock:
             if self._recording:
                 self._frames.append(indata.copy())
-            for q in self._listeners:
-                try:
-                    q.put_nowait(chunk)
-                except Exception:
-                    pass
+            if self._listeners:
+                # Listeners (e.g. wake word) expect 16 kHz audio
+                chunk_16k = _resample(chunk_raw, _RATE)
+                for q in self._listeners:
+                    try:
+                        q.put_nowait(chunk_16k)
+                    except Exception:
+                        pass
 
     def get_rms(self) -> float:
         """Return RMS of the most recent audio chunk (0.0 if nothing captured yet)."""

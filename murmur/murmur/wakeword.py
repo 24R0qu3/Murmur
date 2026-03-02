@@ -53,7 +53,8 @@ class WakeWordListener:
         self._paused.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
-        print(f"  Wake word  \"{self._model_name}\"  (threshold {self._threshold})")
+        model_keys = list(self._model.models.keys()) if hasattr(self._model, "models") else ["?"]
+        print(f"  Wake word  \"{self._model_name}\"  loaded  keys={model_keys}  threshold={self._threshold}")
         return True
 
     def stop(self):
@@ -88,8 +89,8 @@ class WakeWordListener:
     def _run(self):
         import numpy as np
 
-        last_detection = 0.0
-        buf = np.zeros(0, dtype=np.float32)
+        last_detection  = 0.0
+        buf             = np.zeros(0, dtype=np.float32)
 
         while not self._stop_event.is_set():
             try:
@@ -109,13 +110,17 @@ class WakeWordListener:
                 buf    = buf[_CHUNK_SAMPLES:]
 
                 try:
-                    scores = self._model.predict(window)
+                    # openwakeword expects int16 audio, not float32
+                    window_int16 = (np.clip(window, -1.0, 1.0) * 32767).astype(np.int16)
+                    scores = self._model.predict(window_int16)
                 except Exception:
                     continue
 
-                confidence = max(scores.get(k, 0.0) for k in scores)
+                confidence = max(scores.values(), default=0.0)
+
                 now = time.monotonic()
                 if confidence >= self._threshold and (now - last_detection) >= _COOLDOWN_SECONDS:
                     last_detection = now
+                    print(f"  Wake word  DETECTED  confidence={confidence:.3f}", flush=True)
                     if self._on_detected and not self._paused.is_set():
                         self._on_detected()

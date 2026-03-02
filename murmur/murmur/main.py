@@ -175,14 +175,21 @@ def main():
 
     def _on_wake_word():
         if not _is_recording.is_set():
+            print(f"\n  Hello! Wake word detected — recording…", flush=True)
             on_press()
             threading.Thread(target=_wake_word_finish, daemon=True).start()
 
     def _wake_word_finish():
         with _transcribe_lock:
             audio = recorder.record_until_silence(
-                max_seconds=30, silence_duration=1.5,
+                max_seconds=30, silence_duration=5.0,
             )
+            # Stop the spinner animation started by on_press()
+            stop = _anim.pop("stop", None)
+            if stop:
+                stop.set()
+            _set_state("transcribing")
+            print(f"\r◼  Transcribing …{' ' * (_BAR_WIDTH + 12)}", flush=True)
             try:
                 text = transcriber.transcribe(audio)
             except Exception as e:
