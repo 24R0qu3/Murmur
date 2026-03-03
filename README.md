@@ -66,7 +66,29 @@ To run the Whisper model on GPU, install the CUDA-enabled build of CTranslate2 a
 
 ---
 
-## Installation & first run
+## Installation
+
+### Linux / macOS — one-liner (binary, no Python needed)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/24R0qu3/Murmur/main/install.sh | bash
+```
+
+Installs the self-contained binary to `~/.local/bin`. Override the location:
+
+```bash
+INSTALL_DIR=/usr/local/bin bash <(curl -fsSL https://raw.githubusercontent.com/24R0qu3/Murmur/main/install.sh)
+```
+
+### Windows — one-liner (binary, no Python needed)
+
+```powershell
+irm https://raw.githubusercontent.com/24R0qu3/Murmur/main/install.ps1 | iex
+```
+
+Installs to `%LOCALAPPDATA%\Programs\murmur` and adds it to the user PATH automatically.
+
+### From source (Python required)
 
 ```bash
 git clone https://github.com/24R0qu3/Murmur.git
@@ -74,7 +96,19 @@ cd Murmur/murmur
 uv run murmur
 ```
 
-On first run uv creates a virtual environment and downloads the Whisper model (≈150 MB for `base`). Subsequent starts are fast.
+### From GitHub (pip / uv)
+
+```bash
+# uv
+uv tool install "murmur @ git+https://github.com/24R0qu3/Murmur.git#subdirectory=murmur"
+
+# pip
+pip install "murmur @ git+https://github.com/24R0qu3/Murmur.git#subdirectory=murmur"
+```
+
+---
+
+On first run the Whisper model is downloaded automatically (≈150 MB for `base`). Subsequent starts are fast.
 
 Expected output:
 
@@ -172,21 +206,26 @@ ConnectionError: Murmur daemon is not running. Start it with: uv run murmur
 
 ```
 Murmur/
+├── install.sh               # One-liner installer (Linux / macOS)
+├── install.ps1              # One-liner installer (Windows)
 ├── murmur/                  # Daemon package
 │   ├── pyproject.toml
-│   └── murmur/
+│   ├── murmur.spec          # PyInstaller spec
+│   └── src/murmur/
 │       ├── main.py          # Entry point — wires everything together
 │       ├── config.py        # Config loading (~/.config/murmur/config.toml)
 │       ├── audio.py         # Microphone capture (sounddevice + auto device detection)
 │       ├── transcribe.py    # faster-whisper wrapper
 │       ├── inject.py        # Text injection (xdotool / ydotool / clipboard+Ctrl+V)
 │       ├── hotkey.py        # Global hotkey listener (pynput)
-│       └── ipc.py           # JSON-over-socket server (Unix socket / Named Pipe)
+│       ├── ipc.py           # JSON-over-socket server (Unix socket / Named Pipe)
+│       └── log.py           # Rotating file logger
 └── murmur-mcp/              # MCP server package
     ├── pyproject.toml
-    └── murmur_mcp/
+    └── src/murmur_mcp/
         ├── main.py          # FastMCP entry point
-        └── ipc_client.py    # IPC client (connects to the daemon)
+        ├── ipc_client.py    # IPC client (connects to the daemon)
+        └── log.py           # Rotating file logger
 ```
 
 ---
