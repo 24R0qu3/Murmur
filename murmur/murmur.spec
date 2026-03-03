@@ -6,6 +6,8 @@ Usage:
     cd murmur
     uv run pyinstaller murmur.spec --noconfirm
 """
+import glob as _glob
+import os as _os
 import sys
 from PyInstaller.utils.hooks import collect_all
 
@@ -23,7 +25,7 @@ _COLLECT_PKGS = [
 
 datas:         list = []
 binaries:      list = []
-hiddenimports: list = ["tomllib"]
+hiddenimports: list = ["tomllib", "wave", "tkinter", "tkinter.ttk", "_tkinter"]
 
 for _pkg in _COLLECT_PKGS:
     try:
@@ -33,6 +35,43 @@ for _pkg in _COLLECT_PKGS:
         hiddenimports += _h
     except Exception:
         pass
+
+# ── Bundle Tcl/Tk for the tkinter GUI overlay ─────────────────────────────────
+# python-build-standalone (used by uv) ships its own Tcl/Tk 9.x alongside the
+# Python interpreter.  PyInstaller's hook-_tkinter.py often misses these libs
+# on Linux because it cannot follow the $ORIGIN-relative RPATH in _tkinter.so.
+# We explicitly walk the Python home's lib/ directory and collect everything.
+
+if sys.platform != "win32":
+    def _collect_tcl_tk():
+        _bins, _tk_datas = [], []
+        # python-build-standalone layout: <home>/bin/python3.x  <home>/lib/libtcl*.so
+        _home = _os.path.dirname(_os.path.dirname(sys.executable))
+        _lib  = _os.path.join(_home, "lib")
+        if not _os.path.isdir(_lib):
+            return _bins, _tk_datas
+        # Shared libraries (libtcl9.0.so, libtk9.0.so, …)
+        for _pat in ("libtcl*.so*", "libtk*.so*"):
+            for _p in _glob.glob(_os.path.join(_lib, _pat)):
+                if _os.path.exists(_p):
+                    _bins.append((_p, "."))
+        # Tcl/Tk library directories (contain init.tcl, tk.tcl, …)
+        for _pat in ("tcl[0-9]*", "tk[0-9]*"):
+            for _p in _glob.glob(_os.path.join(_lib, _pat)):
+                if _os.path.isdir(_p):
+                    _tk_datas.append((_p, _os.path.basename(_p)))
+        return _bins, _tk_datas
+
+    try:
+        _tcl_bins, _tcl_datas = _collect_tcl_tk()
+        binaries += _tcl_bins
+        datas    += _tcl_datas
+        if _tcl_bins or _tcl_datas:
+            print(f"  Tcl/Tk: bundling {len(_tcl_bins)} libs, {len(_tcl_datas)} data dirs")
+        else:
+            print("  WARNING: Tcl/Tk libs not found — GUI overlay may be unavailable")
+    except Exception as _e:
+        print(f"  WARNING: Tcl/Tk collection error: {_e}")
 
 # ── Platform-specific backends ────────────────────────────────────────────────
 
@@ -64,7 +103,7 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
-    runtime_hooks=[],
+    runtime_hooks=["runtime_hook_tkinter.py"],
     # openwakeword is an optional extra — not bundled
     excludes=["openwakeword"],
     noarchive=False,

@@ -82,7 +82,7 @@ def _find_install_command(target: Path) -> list[str] | None:
     # uv pip install --target may skip transitive dependencies in some versions.
     for pip in ["pip", "pip3"]:
         if shutil.which(pip):
-            return [pip, "install", _PACKAGE, "--target", t]
+            return [pip, "install", _PACKAGE, "--target", t, "--upgrade"]
 
     # python -m pip  (covers py launcher on Windows too)
     candidates = ["python", "python3"]
@@ -91,10 +91,10 @@ def _find_install_command(target: Path) -> list[str] | None:
 
     for python in candidates:
         if shutil.which(python):
-            return [python, "-m", "pip", "install", _PACKAGE, "--target", t]
+            return [python, "-m", "pip", "install", _PACKAGE, "--target", t, "--upgrade"]
 
     # uv as last resort (may have --target dependency issues)
     if shutil.which("uv"):
-        return ["uv", "pip", "install", _PACKAGE, "--target", t]
+        return ["uv", "pip", "install", _PACKAGE, "--target", t, "--upgrade"]
 
     return None
