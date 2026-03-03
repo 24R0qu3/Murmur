@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install PortAudio (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get install -y libportaudio2
+
+      - name: Install dependencies
+        run: uv sync --extra build
+        working-directory: murmur
+
+      - name: Build executable
+        run: uv run pyinstaller murmur.spec --noconfirm
+        working-directory: murmur
+
+      - name: Rename executable (Unix)
+        if: matrix.os != 'windows-latest'
+        run: mv murmur/dist/murmur "murmur/dist/murmur-${{ github.ref_name }}-${{ matrix.platform }}"
+
+      - name: Rename executable (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: mv murmur/dist/murmur.exe "murmur/dist/murmur-${{ github.ref_name }}-windows.exe"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: murmur_${{ github.ref_name }}_${{ matrix.os }}
+          path: murmur/dist/murmur-${{ github.ref_name }}-*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*
