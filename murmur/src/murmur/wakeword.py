@@ -54,8 +54,8 @@ class WakeWordListener:
                 self._model = Model(wakeword_models=[name])
         except ModuleNotFoundError:
             print(
-                "  Wake word unavailable: openwakeword not installed"
-                "  (pip install openwakeword)"
+                "  Wake word unavailable: openwakeword is not installed.\n"
+                "  Run:  murmur --install-wakeword"
             )
             return False
         except Exception as e:

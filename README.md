@@ -13,6 +13,7 @@ An optional companion MCP server lets Claude Code (and any MCP-compatible client
 - **Push-to-talk** — hold F9 (configurable), speak, release
 - **Fully local** — faster-whisper runs on CPU or CUDA; no API keys, no internet
 - **Cross-platform** — Linux (X11 + Wayland) and Windows
+- **Wake word** — optional always-on detection via openwakeword (`murmur --install-wakeword`)
 - **Live audio meter** — visual feedback in the terminal while recording
 - **MCP integration** — expose `listen()` and `status()` tools to Claude Code
 - **Configurable** — model size, language, hotkey, device, inject delay
@@ -63,6 +64,35 @@ Text is injected via the clipboard (Ctrl+V) — no extra tools needed. All nativ
 ### CUDA (optional)
 
 To run the Whisper model on GPU, install the CUDA-enabled build of CTranslate2 and set `device = "cuda"` in your config file.
+
+---
+
+## Wake word (optional)
+
+Murmur supports always-on wake word detection via [openwakeword](https://github.com/dscripka/openWakeWord). Because it adds ~200 MB of ML dependencies, it is not bundled in the binary — install it on demand with one command:
+
+```bash
+murmur --install-wakeword
+```
+
+This downloads `openwakeword` into a user-local directory and leaves the main binary untouched. Restart Murmur afterwards.
+
+Then enable it in your config:
+
+```toml
+wake_word = "hey_jarvis"   # any built-in openwakeword model name
+wake_word_threshold = 0.5  # 0.0–1.0, higher = fewer false positives
+```
+
+Available built-in model names: `hey_jarvis`, `alexa`, `hey_mycroft`, `hey_rhasspy`, and others — see the [openwakeword model list](https://github.com/dscripka/openWakeWord#pre-trained-models). Custom `.onnx` / `.tflite` model files are also supported (use the file path as the value).
+
+**Install location:**
+
+| Platform | Directory |
+|----------|-----------|
+| Linux    | `~/.local/share/murmur/wakeword` |
+| macOS    | `~/Library/Application Support/murmur/wakeword` |
+| Windows  | `%LOCALAPPDATA%\murmur\wakeword` |
 
 ---
 
@@ -217,9 +247,11 @@ Murmur/
 │       ├── audio.py         # Microphone capture (sounddevice + auto device detection)
 │       ├── transcribe.py    # faster-whisper wrapper
 │       ├── inject.py        # Text injection (xdotool / ydotool / clipboard+Ctrl+V)
-│       ├── hotkey.py        # Global hotkey listener (pynput)
-│       ├── ipc.py           # JSON-over-socket server (Unix socket / Named Pipe)
-│       └── log.py           # Rotating file logger
+│       ├── hotkey.py              # Global hotkey listener (pynput)
+│       ├── ipc.py                 # JSON-over-socket server (Unix socket / Named Pipe)
+│       ├── wakeword.py            # Wake word detection (openwakeword)
+│       ├── wakeword_installer.py  # In-app openwakeword installer
+│       └── log.py                 # Rotating file logger
 └── murmur-mcp/              # MCP server package
     ├── pyproject.toml
     └── src/murmur_mcp/
@@ -273,6 +305,12 @@ Make sure `xdotool` is installed and `$DISPLAY` is set. Some Wayland compositors
 ### Model download fails
 
 Faster-whisper downloads models from Hugging Face on first use. If you're offline or behind a proxy, download the model manually and point `model` to the local path in your config.
+
+### Wake word not triggering
+
+- Run `murmur --install-wakeword` if you see "openwakeword is not installed"
+- Raise `wake_word_threshold` to reduce false positives, lower it if it misses detections
+- Built-in models are English-only; use a custom model file for other languages
 
 ### Nothing recognised
 

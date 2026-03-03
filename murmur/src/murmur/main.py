@@ -13,6 +13,7 @@ from .ipc import IPCServer
 from .log import setup as _log_setup
 from .transcribe import Transcriber
 from .tray import TrayIcon
+from .wakeword_installer import inject_wakeword_path, install_wakeword
 
 LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"]
 
@@ -40,7 +41,19 @@ def main():
     parser.add_argument("--log", default="WARNING", choices=LEVELS)
     parser.add_argument("--log-file", default="DEBUG", choices=LEVELS)
     parser.add_argument("--log-path", default=None)
+    parser.add_argument(
+        "--install-wakeword",
+        action="store_true",
+        help="Install the optional openwakeword package and exit.",
+    )
     args, _ = parser.parse_known_args()
+
+    # Install wake word support and exit if requested
+    if args.install_wakeword:
+        raise SystemExit(install_wakeword())
+
+    # Inject side-installed wakeword path before any imports that need it
+    inject_wakeword_path()
 
     kw = {"console_level": args.log, "file_level": args.log_file}
     if args.log_path:
