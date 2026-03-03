@@ -58,8 +58,8 @@ else:
 # ── Build ─────────────────────────────────────────────────────────────────────
 
 a = Analysis(
-    ["src/murmur/main.py"],
-    pathex=[],
+    ["run.py"],
+    pathex=["src"],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
