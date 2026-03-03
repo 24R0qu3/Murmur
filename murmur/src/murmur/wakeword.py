@@ -52,11 +52,17 @@ class WakeWordListener:
                 self._model = Model(wakeword_model_paths=[name])
             else:
                 self._model = Model(wakeword_models=[name])
-        except ModuleNotFoundError:
-            print(
-                "  Wake word unavailable: openwakeword is not installed.\n"
-                "  Run:  murmur --install-wakeword"
-            )
+        except ModuleNotFoundError as e:
+            if "openwakeword" in str(e):
+                print(
+                    "  Wake word unavailable: openwakeword is not installed.\n"
+                    "  Run:  murmur --install-wakeword"
+                )
+            else:
+                print(
+                    f"  Wake word unavailable: missing dependency ({e}).\n"
+                    "  Re-run:  murmur --install-wakeword"
+                )
             return False
         except Exception as e:
             print(f"  Wake word unavailable: {e}")

@@ -54,19 +54,32 @@ def install_wakeword() -> int:
 
     print(f"  Installing {_PACKAGE} to {target} …")
     result = subprocess.run(cmd)
-    if result.returncode == 0:
+    if result.returncode != 0:
+        return result.returncode
+
+    # Verify the install actually worked by checking the package is importable
+    inject_wakeword_path()
+    try:
+        import importlib.util
+
+        if importlib.util.find_spec("openwakeword") is None:
+            raise ImportError("openwakeword not found after install")
         print("  Done. Restart murmur to enable wake word detection.")
-    return result.returncode
+        return 0
+    except Exception as e:
+        print(
+            f"  WARNING: install reported success but openwakeword is not importable: {e}\n"
+            f"  Install directory: {target}\n"
+            f"  Try manually: pip install {_PACKAGE} --target {target}"
+        )
+        return 1
 
 
 def _find_install_command(target: Path) -> list[str] | None:
     t = str(target)
 
-    # uv is the most likely tool for our users
-    if shutil.which("uv"):
-        return ["uv", "pip", "install", _PACKAGE, "--target", t]
-
-    # pip / pip3 directly
+    # Prefer pip/pip3/python -m pip over uv for --target installs:
+    # uv pip install --target may skip transitive dependencies in some versions.
     for pip in ["pip", "pip3"]:
         if shutil.which(pip):
             return [pip, "install", _PACKAGE, "--target", t]
@@ -79,5 +92,9 @@ def _find_install_command(target: Path) -> list[str] | None:
     for python in candidates:
         if shutil.which(python):
             return [python, "-m", "pip", "install", _PACKAGE, "--target", t]
+
+    # uv as last resort (may have --target dependency issues)
+    if shutil.which("uv"):
+        return ["uv", "pip", "install", _PACKAGE, "--target", t]
 
     return None
