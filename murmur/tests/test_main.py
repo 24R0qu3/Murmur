@@ -40,6 +40,18 @@ def test_log_dir_created(tmp_path):
 
 # ── CLI arg parsing tests ─────────────────────────────────────────────────────
 
+_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"]
+
+
+def _make_parser():
+    import argparse
+
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--log", default="WARNING", choices=_LEVELS)
+    parser.add_argument("--log-file", default="DEBUG", choices=_LEVELS)
+    parser.add_argument("--log-path", default=None)
+    return parser
+
 
 @pytest.mark.parametrize(
     "flag,expected",
@@ -50,27 +62,11 @@ def test_log_dir_created(tmp_path):
     ],
 )
 def test_log_flag(flag, expected):
-    import argparse
-
-    from murmur.main import LEVELS
-
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--log", default="WARNING", choices=LEVELS)
-    parser.add_argument("--log-file", default="DEBUG", choices=LEVELS)
-    parser.add_argument("--log-path", default=None)
-    args, _ = parser.parse_known_args(flag)
+    args, _ = _make_parser().parse_known_args(flag)
     assert args.log == expected
 
 
 def test_custom_log_path(tmp_path):
-    import argparse
-
-    from murmur.main import LEVELS
-
     log_path = str(tmp_path / "custom.log")
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--log", default="WARNING", choices=LEVELS)
-    parser.add_argument("--log-file", default="DEBUG", choices=LEVELS)
-    parser.add_argument("--log-path", default=None)
-    args, _ = parser.parse_known_args(["--log-path", log_path])
+    args, _ = _make_parser().parse_known_args(["--log-path", log_path])
     assert args.log_path == log_path
