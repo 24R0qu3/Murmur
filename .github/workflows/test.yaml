@@ -1,0 +1,39 @@
+name: Test
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test-murmur:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv python install 3.11
+        working-directory: murmur
+      - run: uv sync --extra test
+        working-directory: murmur
+      - run: uv run ruff check .
+        working-directory: murmur
+      - run: uv run ruff format --check .
+        working-directory: murmur
+      - run: uv run pytest
+        working-directory: murmur
+
+  test-murmur-mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv python install 3.11
+        working-directory: murmur-mcp
+      - run: uv sync --extra test
+        working-directory: murmur-mcp
+      - run: uv run ruff check .
+        working-directory: murmur-mcp
+      - run: uv run ruff format --check .
+        working-directory: murmur-mcp
+      - run: uv run pytest
+        working-directory: murmur-mcp

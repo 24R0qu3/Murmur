@@ -42,5 +42,8 @@ desktop.ini
 # Local config overrides (real config lives at ~/.config/murmur/config.toml)
 config.toml
 
+# Tests
+.pytest_cache/
+
 # Logs
 *.log

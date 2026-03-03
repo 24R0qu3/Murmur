@@ -69,7 +69,9 @@ class IPCServer:
             pipe = win32pipe.CreateNamedPipe(
                 PIPE_NAME,
                 win32pipe.PIPE_ACCESS_DUPLEX,
-                win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_READMODE_BYTE | win32pipe.PIPE_WAIT,
+                win32pipe.PIPE_TYPE_BYTE
+                | win32pipe.PIPE_READMODE_BYTE
+                | win32pipe.PIPE_WAIT,
                 win32pipe.PIPE_UNLIMITED_INSTANCES,
                 65536,
                 65536,
@@ -83,6 +85,7 @@ class IPCServer:
                 ).start()
             except pywintypes.error:
                 import win32file
+
                 win32file.CloseHandle(pipe)
 
     def _handle_windows_conn(self, pipe):

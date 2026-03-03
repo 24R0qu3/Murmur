@@ -1,7 +1,7 @@
 import glob
 import os
-import sys
 import site
+import sys
 
 import numpy as np
 
@@ -36,7 +36,9 @@ def _add_cuda_dll_dirs() -> None:
                 dirs.append(path)
 
     if dirs:
-        os.environ["PATH"] = os.pathsep.join(dirs) + os.pathsep + os.environ.get("PATH", "")
+        os.environ["PATH"] = (
+            os.pathsep.join(dirs) + os.pathsep + os.environ.get("PATH", "")
+        )
 
 
 # Must run before faster_whisper / ctranslate2 are imported
@@ -44,6 +46,7 @@ _add_cuda_dll_dirs()
 
 try:
     import onnxruntime as _ort
+
     _ort.set_default_logger_severity(3)  # ERROR only — suppress GPU discovery warnings
 except Exception:
     pass
@@ -56,6 +59,7 @@ def detect_device() -> str:
     Safe to call on any platform — all failure modes are caught."""
     try:
         import ctranslate2
+
         if ctranslate2.get_cuda_device_count() > 0:
             return "cuda"
     except Exception:
@@ -90,7 +94,7 @@ class Transcriber:
             if "compute type" in str(exc).lower() and self.compute_type == "float16":
                 print(
                     "  WARNING: float16 not supported on this device — falling back to int8_float32.\n"
-                    "  Set compute_type = \"int8_float32\" in config.toml to silence this."
+                    '  Set compute_type = "int8_float32" in config.toml to silence this.'
                 )
                 self.compute_type = "int8_float32"
                 self._model = WhisperModel(
@@ -105,7 +109,7 @@ class Transcriber:
         """Reload the model on CPU (called after a CUDA failure)."""
         print(
             "  WARNING: CUDA unavailable — reloading model on CPU.\n"
-            "  Set device = \"cpu\" in config.toml to avoid this at startup."
+            '  Set device = "cpu" in config.toml to avoid this at startup.'
         )
         self._model = WhisperModel(self._model_name, device="cpu")
         self.device = "cpu"

@@ -1,3 +1,4 @@
+import argparse
 import itertools
 import signal
 import threading
@@ -9,12 +10,15 @@ from .config import load_config
 from .hotkey import HotkeyListener
 from .inject import inject_text
 from .ipc import IPCServer
+from .log import setup as _log_setup
 from .transcribe import Transcriber
 from .tray import TrayIcon
 
+LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"]
+
 _BAR_WIDTH = 24
 _BAR_SCALE = 0.06
-_SPINNER   = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
 def _level_bar(rms: float) -> str:
@@ -32,10 +36,21 @@ def _run_recording_display(stop: threading.Event, recorder: AudioRecorder):
 
 
 def main():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--log", default="WARNING", choices=LEVELS)
+    parser.add_argument("--log-file", default="DEBUG", choices=LEVELS)
+    parser.add_argument("--log-path", default=None)
+    args, _ = parser.parse_known_args()
+
+    kw = {"console_level": args.log, "file_level": args.log_file}
+    if args.log_path:
+        kw["log_path"] = args.log_path
+    _log_setup(**kw)
+
     print("Loading model...")
-    config      = load_config()
+    config = load_config()
     transcriber = Transcriber(config)
-    recorder    = AudioRecorder()
+    recorder = AudioRecorder()
     _transcribe_lock = threading.Lock()
 
     print("Ready.")
@@ -49,16 +64,16 @@ def main():
     print(f"  device    {device_label}")
     print(f"  compute   {transcriber.compute_type}")
     if config.wake_word:
-        print(f"  wake word \"{config.wake_word}\"")
-    print(f"  Ctrl+C  exit")
+        print(f'  wake word "{config.wake_word}"')
+    print("  Ctrl+C  exit")
     print()
 
-    _anim         : dict              = {}
-    _is_recording                     = threading.Event()
-    _shutdown                         = threading.Event()
-    _overlay                          = None   # OverlayWindow | None
-    _root                             = None   # tk.Tk | None
-    _wakeword_listener                = None   # WakeWordListener | None
+    _anim: dict = {}
+    _is_recording = threading.Event()
+    _shutdown = threading.Event()
+    _overlay = None  # OverlayWindow | None
+    _root = None  # tk.Tk | None
+    _wakeword_listener = None  # WakeWordListener | None
 
     # ── Thread-safe helpers ───────────────────────────────────────────────────
 
@@ -79,9 +94,9 @@ def main():
         if command == "status":
             return {"running": True}
         elif command == "listen":
-            timeout          = cmd.get("timeout", 30)
+            timeout = cmd.get("timeout", 30)
             silence_duration = cmd.get("silence_duration", 1.5)
-            countdown        = cmd.get("countdown", 0)
+            countdown = cmd.get("countdown", 0)
             if countdown > 0:
                 for i in range(countdown, 0, -1):
                     print(f"\r  MCP  speak in {i}…   ", end="", flush=True)
@@ -94,13 +109,15 @@ def main():
                 _wakeword_listener.pause()
             with _transcribe_lock:
                 audio = recorder.record_until_silence(
-                    max_seconds=timeout, silence_duration=silence_duration,
+                    max_seconds=timeout,
+                    silence_duration=silence_duration,
                 )
                 text = transcriber.transcribe(audio)
             if _wakeword_listener:
                 _wakeword_listener.resume()
             print(
-                f"\r  MCP → {text}{' ' * 10}" if text
+                f"\r  MCP → {text}{' ' * 10}"
+                if text
                 else f"\r  MCP   (nothing recognised){' ' * 10}"
             )
             return {"text": text}
@@ -120,7 +137,9 @@ def main():
         stop = threading.Event()
         _anim["stop"] = stop
         threading.Thread(
-            target=_run_recording_display, args=(stop, recorder), daemon=True,
+            target=_run_recording_display,
+            args=(stop, recorder),
+            daemon=True,
         ).start()
 
     def _finish():
@@ -167,7 +186,9 @@ def main():
     ipc_server.start(ipc_handler)
 
     hotkey_listener = HotkeyListener(
-        key_name=config.hotkey, on_press=on_press, on_release=on_release,
+        key_name=config.hotkey,
+        on_press=on_press,
+        on_release=on_release,
     )
     hotkey_listener.start()
 
@@ -175,14 +196,15 @@ def main():
 
     def _on_wake_word():
         if not _is_recording.is_set():
-            print(f"\n  Hello! Wake word detected — recording…", flush=True)
+            print("\n  Hello! Wake word detected — recording…", flush=True)
             on_press()
             threading.Thread(target=_wake_word_finish, daemon=True).start()
 
     def _wake_word_finish():
         with _transcribe_lock:
             audio = recorder.record_until_silence(
-                max_seconds=30, silence_duration=5.0,
+                max_seconds=30,
+                silence_duration=5.0,
             )
             # Stop the spinner animation started by on_press()
             stop = _anim.pop("stop", None)
@@ -210,6 +232,7 @@ def main():
 
     if config.wake_word:
         from .wakeword import WakeWordListener
+
         _wakeword_listener = WakeWordListener(
             model_name=config.wake_word,
             threshold=config.wake_word_threshold,
@@ -229,6 +252,7 @@ def main():
     if config.overlay:
         try:
             import tkinter as tk
+
             from .overlay import OverlayWindow
             from .settings_dialog import SettingsDialog
 
@@ -236,10 +260,11 @@ def main():
 
             def _apply_settings(**kw):
                 nonlocal hotkey_listener, _wakeword_listener
-                config.language                = kw.get("language", config.language)
-                config.overlay_raise_on_hotkey = kw.get("overlay_raise_on_hotkey",
-                                                         config.overlay_raise_on_hotkey)
-                transcriber._language          = config.language
+                config.language = kw.get("language", config.language)
+                config.overlay_raise_on_hotkey = kw.get(
+                    "overlay_raise_on_hotkey", config.overlay_raise_on_hotkey
+                )
+                transcriber._language = config.language
                 if _overlay is not None:
                     _overlay.apply_topmost(
                         kw.get("overlay_always_on_top", config.overlay_always_on_top)
@@ -249,13 +274,20 @@ def main():
                     config.hotkey = new_hotkey
                     hotkey_listener.stop()
                     hotkey_listener = HotkeyListener(
-                        key_name=config.hotkey, on_press=on_press, on_release=on_release,
+                        key_name=config.hotkey,
+                        on_press=on_press,
+                        on_release=on_release,
                     )
                     hotkey_listener.start()
                 new_wake_word = kw.get("wake_word", config.wake_word)
-                new_threshold = kw.get("wake_word_threshold", config.wake_word_threshold)
-                if new_wake_word != config.wake_word or new_threshold != config.wake_word_threshold:
-                    config.wake_word           = new_wake_word
+                new_threshold = kw.get(
+                    "wake_word_threshold", config.wake_word_threshold
+                )
+                if (
+                    new_wake_word != config.wake_word
+                    or new_threshold != config.wake_word_threshold
+                ):
+                    config.wake_word = new_wake_word
                     config.wake_word_threshold = new_threshold
                     if _wakeword_listener:
                         recorder.detach_listener(_wakeword_listener.queue)
@@ -263,8 +295,10 @@ def main():
                         _wakeword_listener = None
                     if new_wake_word:
                         from .wakeword import WakeWordListener
+
                         _wakeword_listener = WakeWordListener(
-                            model_name=new_wake_word, threshold=new_threshold,
+                            model_name=new_wake_word,
+                            threshold=new_threshold,
                         )
                         _wakeword_listener.start(_on_wake_word)
                         recorder.attach_listener(_wakeword_listener.queue)
@@ -276,12 +310,14 @@ def main():
                     existing: dict = {}
                     if config_path.exists():
                         import tomllib
+
                         with open(config_path, "rb") as f:
                             existing = tomllib.load(f)
                     existing["overlay_x"] = x
                     existing["overlay_y"] = y
                     config_path.parent.mkdir(parents=True, exist_ok=True)
                     from .settings_dialog import _dump_toml
+
                     config_path.write_text(_dump_toml(existing))
                 except Exception:
                     pass
@@ -295,7 +331,10 @@ def main():
                     _settings_dialog.focus_force()
                     return
                 _settings_dialog = SettingsDialog(
-                    _root, config, config_path, _apply_settings,
+                    _root,
+                    config,
+                    config_path,
+                    _apply_settings,
                     on_recenter=_overlay.recenter,
                 )
 
@@ -303,7 +342,8 @@ def main():
             tray._on_settings = lambda: _root.after(0, _open_settings)
 
             _overlay = OverlayWindow(
-                _root, config,
+                _root,
+                config,
                 on_settings=_open_settings,
                 on_quit=_shutdown.set,
                 get_rms=recorder.get_rms,
@@ -311,7 +351,7 @@ def main():
             )
 
             # Route signals through tkinter thread to avoid race conditions
-            signal.signal(signal.SIGINT,  lambda *_: _root.after(0, _shutdown.set))
+            signal.signal(signal.SIGINT, lambda *_: _root.after(0, _shutdown.set))
             signal.signal(signal.SIGTERM, lambda *_: _root.after(0, _shutdown.set))
 
             def _check_shutdown():
@@ -325,12 +365,12 @@ def main():
 
         except Exception as e:
             print(f"  overlay unavailable ({e}), running headless")
-            signal.signal(signal.SIGINT,  lambda *_: _shutdown.set())
+            signal.signal(signal.SIGINT, lambda *_: _shutdown.set())
             signal.signal(signal.SIGTERM, lambda *_: _shutdown.set())
             while not _shutdown.is_set():
                 _shutdown.wait(timeout=0.5)
     else:
-        signal.signal(signal.SIGINT,  lambda *_: _shutdown.set())
+        signal.signal(signal.SIGINT, lambda *_: _shutdown.set())
         signal.signal(signal.SIGTERM, lambda *_: _shutdown.set())
         while not _shutdown.is_set():
             _shutdown.wait(timeout=0.5)

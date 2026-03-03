@@ -1,7 +1,7 @@
 import queue
 import sys
-import time
 import threading
+import time
 
 import numpy as np
 import sounddevice as sd
@@ -24,7 +24,9 @@ def _find_working_config() -> tuple[int | None, int]:
                 if "WASAPI" in api["name"] and api["default_input_device"] >= 0:
                     dev = api["default_input_device"]
                     try:
-                        native = int(sd.query_devices(dev, "input")["default_samplerate"])
+                        native = int(
+                            sd.query_devices(dev, "input")["default_samplerate"]
+                        )
                     except Exception:
                         native = 48000
                     candidates.append((dev, native))
@@ -111,7 +113,7 @@ class AudioRecorder:
                 pass
 
     def _callback(self, indata, frames, time_info, status):
-        chunk = indata[:, 0].copy()   # flatten to 1-D float32
+        chunk = indata[:, 0].copy()  # flatten to 1-D float32
         with self._lock:
             if self._recording:
                 self._frames.append(indata.copy())

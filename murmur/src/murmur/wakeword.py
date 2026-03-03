@@ -13,9 +13,8 @@ import threading
 import time
 from typing import Callable
 
-
 _COOLDOWN_SECONDS = 2.0
-_CHUNK_SAMPLES    = 1280   # 80 ms at 16 kHz — openwakeword's expected chunk size
+_CHUNK_SAMPLES = 1280  # 80 ms at 16 kHz — openwakeword's expected chunk size
 
 
 class WakeWordListener:
@@ -26,13 +25,13 @@ class WakeWordListener:
 
     def __init__(self, model_name: str, threshold: float = 0.5):
         self._model_name = model_name
-        self._threshold  = threshold
+        self._threshold = threshold
         self._queue: queue.Queue[bytes] = queue.Queue(maxsize=50)
         self._thread: threading.Thread | None = None
-        self._stop_event  = threading.Event()
-        self._paused      = threading.Event()
+        self._stop_event = threading.Event()
+        self._paused = threading.Event()
         self._on_detected: Callable | None = None
-        self._model       = None
+        self._model = None
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -41,15 +40,23 @@ class WakeWordListener:
         openwakeword is not installed."""
         try:
             from openwakeword.model import Model
+
             # Pass as a named built-in model or as a file path depending on the value
             name = self._model_name
-            if name.endswith(".onnx") or name.endswith(".tflite") or "/" in name or "\\" in name:
+            if (
+                name.endswith(".onnx")
+                or name.endswith(".tflite")
+                or "/" in name
+                or "\\" in name
+            ):
                 self._model = Model(wakeword_model_paths=[name])
             else:
                 self._model = Model(wakeword_models=[name])
         except ModuleNotFoundError:
-            print("  Wake word unavailable: openwakeword not installed"
-                  "  (pip install openwakeword)")
+            print(
+                "  Wake word unavailable: openwakeword not installed"
+                "  (pip install openwakeword)"
+            )
             return False
         except Exception as e:
             print(f"  Wake word unavailable: {e}")
@@ -60,7 +67,7 @@ class WakeWordListener:
         self._paused.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
-        print(f"  Wake word  \"{self._model_name}\"  (threshold {self._threshold})")
+        print(f'  Wake word  "{self._model_name}"  (threshold {self._threshold})')
         return True
 
     def stop(self):
@@ -94,6 +101,7 @@ class WakeWordListener:
 
     def _run(self):
         import numpy as np
+
         from .audio import _RATE, _resample
 
         last_detection = 0.0
@@ -117,7 +125,7 @@ class WakeWordListener:
             buf = np.concatenate([buf, chunk])
             while len(buf) >= _CHUNK_SAMPLES:
                 window = buf[:_CHUNK_SAMPLES]
-                buf    = buf[_CHUNK_SAMPLES:]
+                buf = buf[_CHUNK_SAMPLES:]
 
                 try:
                     # openwakeword expects int16 PCM [-32768, 32767]
@@ -127,7 +135,10 @@ class WakeWordListener:
 
                 confidence = max(scores.get(k, 0.0) for k in scores)
                 now = time.monotonic()
-                if confidence >= self._threshold and (now - last_detection) >= _COOLDOWN_SECONDS:
+                if (
+                    confidence >= self._threshold
+                    and (now - last_detection) >= _COOLDOWN_SECONDS
+                ):
                     last_detection = now
                     if self._on_detected and not self._paused.is_set():
                         self._on_detected()

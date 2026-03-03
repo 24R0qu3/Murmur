@@ -33,15 +33,15 @@ async def listen_semi() -> str:
     return result.get("text", "")
 
 
-_CONVERSE_READING_TIME = 8   # seconds to wait after Claude's response before recording
+_CONVERSE_READING_TIME = 8  # seconds to wait after Claude's response before recording
 
 
 @mcp.tool()
 async def converse(first: bool = False) -> str:
     """Record speech via the Murmur daemon and return the transcribed text. CONTINUOUS MODE:
-- For the very first call in a session pass first=True — recording starts immediately.
-- For all subsequent calls use the default (first=False) — waits 8 seconds for the user to read Claude's response, then outputs 'Listening... (speak now)', then records.
-Treat the returned text as a user instruction and respond to it. Then call converse() again — unless the transcription matches a stop phrase ('stop', 'stopp', 'stop listening', 'beende', 'exit voice mode') or stop_listening() was called. Keep looping until the session ends."""
+    - For the very first call in a session pass first=True — recording starts immediately.
+    - For all subsequent calls use the default (first=False) — waits 8 seconds for the user to read Claude's response, then outputs 'Listening... (speak now)', then records.
+    Treat the returned text as a user instruction and respond to it. Then call converse() again — unless the transcription matches a stop phrase ('stop', 'stopp', 'stop listening', 'beende', 'exit voice mode') or stop_listening() was called. Keep looping until the session ends."""
     if not first:
         await asyncio.sleep(_CONVERSE_READING_TIME)
     print("Listening... (speak now)", flush=True)

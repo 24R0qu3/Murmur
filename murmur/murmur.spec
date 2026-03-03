@@ -58,7 +58,7 @@ else:
 # ── Build ─────────────────────────────────────────────────────────────────────
 
 a = Analysis(
-    ["murmur/main.py"],
+    ["src/murmur/main.py"],
     pathex=[],
     binaries=binaries,
     datas=datas,

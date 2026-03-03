@@ -8,6 +8,7 @@ from typing import Callable
 try:
     import pystray
     from PIL import Image, ImageDraw
+
     _AVAILABLE = True
 except ImportError:
     _AVAILABLE = False
@@ -15,9 +16,9 @@ except ImportError:
 _ICON_SIZE = 64
 
 _COLORS = {
-    "idle":         (120, 120, 120, 255),  # grey
-    "recording":    (210,  50,  50, 255),  # red
-    "transcribing": (210, 155,  30, 255),  # amber
+    "idle": (120, 120, 120, 255),  # grey
+    "recording": (210, 50, 50, 255),  # red
+    "transcribing": (210, 155, 30, 255),  # amber
 }
 
 

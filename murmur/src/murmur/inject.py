@@ -16,6 +16,7 @@ def detect_platform() -> str:
 def inject_text(text: str, delay_ms: int = 0):
     if delay_ms > 0:
         import time
+
         time.sleep(delay_ms / 1000)
 
     platform = detect_platform()
