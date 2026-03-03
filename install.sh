@@ -14,8 +14,8 @@ OS="$(uname -s)"
 ARCH="$(uname -m)"
 case "$OS-$ARCH" in
   Linux-x86_64)   ARTIFACT="murmur-linux-x86_64"  ;;
-  Darwin-arm64)   ARTIFACT="murmur-macos-arm64"    ;;
-  Darwin-x86_64)  ARTIFACT="murmur-macos-x86_64"   ;;
+  Darwin-arm64)   ARTIFACT="murmur-macos-arm64"  ;;
+  Darwin-x86_64)  ARTIFACT="murmur-macos-arm64"  ;;  # runs via Rosetta 2
   *)
     echo "Unsupported platform: $OS $ARCH" >&2
     echo "Install from source: https://github.com/$REPO" >&2

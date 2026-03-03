@@ -27,10 +27,6 @@ jobs:
             artifact: murmur-macos-arm64
             dist_file: dist/murmur
 
-          - os: macos-13
-            artifact: murmur-macos-x86_64
-            dist_file: dist/murmur
-
     steps:
       - uses: actions/checkout@v4
 
@@ -121,8 +117,7 @@ jobs:
           |---|---|
           | Windows 10/11 (x86-64) | \`murmur-windows-x86_64.exe\` |
           | Linux (x86-64, glibc ≥ 2.35) | \`murmur-linux-x86_64\` |
-          | macOS (Apple Silicon) | \`murmur-macos-arm64\` |
-          | macOS (Intel) | \`murmur-macos-x86_64\` |
+          | macOS (arm64, runs via Rosetta on Intel) | \`murmur-macos-arm64\` |
 
           ### Linux / macOS
           \`\`\`bash
@@ -143,10 +138,10 @@ jobs:
 
           ### Manual (macOS)
           \`\`\`bash
-          chmod +x murmur-macos-arm64   # or murmur-macos-x86_64 on Intel
+          chmod +x murmur-macos-arm64
           ./murmur-macos-arm64
           \`\`\`
-          Requires \`portaudio\` (\`brew install portaudio\`).
+          Requires \`portaudio\` (\`brew install portaudio\`). Runs via Rosetta 2 on Intel Macs.
 
           ### CUDA
           CUDA is **not** bundled. Install \`nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cuda-runtime-cu12\`
