@@ -11,11 +11,14 @@ INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # ── Detect platform ──────────────────────────────────────────────────────────
 OS="$(uname -s)"
-case "$OS" in
-  Linux)  PLATFORM="linux"  ;;
-  Darwin) PLATFORM="macos"  ;;
+ARCH="$(uname -m)"
+case "$OS-$ARCH" in
+  Linux-x86_64)   ARTIFACT="murmur-linux-x86_64"  ;;
+  Darwin-arm64)   ARTIFACT="murmur-macos-arm64"    ;;
+  Darwin-x86_64)  ARTIFACT="murmur-macos-x86_64"   ;;
   *)
-    echo "Unsupported OS: $OS" >&2
+    echo "Unsupported platform: $OS $ARCH" >&2
+    echo "Install from source: https://github.com/$REPO" >&2
     exit 1
     ;;
 esac
@@ -32,8 +35,8 @@ if [ -z "$TAG" ]; then
 fi
 
 # ── Download binary ──────────────────────────────────────────────────────────
-URL="https://github.com/$REPO/releases/download/$TAG/${BIN_NAME}-${TAG}-${PLATFORM}"
-echo "Downloading $BIN_NAME $TAG ($PLATFORM)..."
+URL="https://github.com/$REPO/releases/download/$TAG/$ARTIFACT"
+echo "Downloading $BIN_NAME $TAG ($ARTIFACT)..."
 
 mkdir -p "$INSTALL_DIR"
 curl -fsSL "$URL" -o "$INSTALL_DIR/$BIN_NAME"
