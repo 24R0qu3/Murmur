@@ -35,7 +35,7 @@ where = ["src"]
 version = {attr = "murmur.__version__"}
 
 [tool.bumpversion]
-current_version = "1.0.11"
+current_version = "1.0.12"
 commit = true
 tag = true
 tag_name = "v{new_version}"
