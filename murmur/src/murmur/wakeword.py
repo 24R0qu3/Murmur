@@ -56,7 +56,8 @@ class WakeWordListener:
             else:
                 # Match against the bundled pretrained models by stem name.
                 candidates = [
-                    p for p in openwakeword.get_pretrained_model_paths()
+                    p
+                    for p in openwakeword.get_pretrained_model_paths()
                     if name.lower() in p.lower()
                 ]
                 if not candidates:

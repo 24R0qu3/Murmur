@@ -64,11 +64,7 @@ def inject_wakeword_path() -> bool:
 
     # Legacy fallback: old --target installs (before venv approach)
     legacy = get_wakeword_dir()
-    if (
-        legacy.exists()
-        and not venv_dir.exists()
-        and str(legacy) not in sys.path
-    ):
+    if legacy.exists() and not venv_dir.exists() and str(legacy) not in sys.path:
         sys.path.insert(0, str(legacy))
         return True
 

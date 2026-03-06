@@ -54,7 +54,11 @@ if sys.platform != "win32":
                 _bins.append((real, "."))
 
         # Method 1: python-build-standalone layout — <home>/lib/libtcl*.so
-        _home = _os.path.dirname(_os.path.dirname(sys.executable))
+        # Use realpath to resolve the venv symlink (sys.executable in a uv venv
+        # points to .venv/bin/python3.11, not the actual python-build-standalone
+        # binary, so dirname/dirname lands in the venv dir instead of the real
+        # Python home where libtcl9.0.so lives).
+        _home = _os.path.dirname(_os.path.dirname(_os.path.realpath(sys.executable)))
         _lib  = _os.path.join(_home, "lib")
         if _os.path.isdir(_lib):
             for _pat in ("libtcl*.so*", "libtk*.so*"):

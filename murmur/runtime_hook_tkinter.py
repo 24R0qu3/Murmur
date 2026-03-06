@@ -13,6 +13,7 @@ user's machine).  Preloading via ctypes registers the libraries in the
 process-global dlopen cache by their soname, so the subsequent implicit
 dlopen() inside _tkinter succeeds regardless of RPATH.
 """
+
 import glob
 import os
 import sys
