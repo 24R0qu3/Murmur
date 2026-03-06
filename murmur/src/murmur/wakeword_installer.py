@@ -99,7 +99,9 @@ def install_wakeword() -> int:
         sp = _find_venv_site_packages(venv_dir)
         wrong_version = sp is not None and f"python{_PY_VER}" not in str(sp)
         if sp is None or wrong_version:
-            print(f"  Removing incompatible venv (wrong Python version or incomplete) …")
+            print(
+                "  Removing incompatible venv (wrong Python version or incomplete) …"
+            )
             shutil.rmtree(venv_dir)
 
     print(f"  Creating virtual environment (Python {_PY_VER}) at {venv_dir} …")
@@ -163,7 +165,12 @@ def install_wakeword() -> int:
 def _find_system_python() -> str | None:
     """Return a system Python matching the running interpreter's version."""
     # Prefer an exact version match — critical for C-extension ABI compatibility.
-    candidates = [f"python{_PY_VER}", f"python{sys.version_info.major}", "python3", "python"]
+    candidates = [
+        f"python{_PY_VER}",
+        f"python{sys.version_info.major}",
+        "python3",
+        "python",
+    ]
     if sys.platform == "win32":
         candidates = ["py"] + candidates
     for python in candidates:
