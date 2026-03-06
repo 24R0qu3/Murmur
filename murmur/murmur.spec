@@ -45,21 +45,49 @@ for _pkg in _COLLECT_PKGS:
 if sys.platform != "win32":
     def _collect_tcl_tk():
         _bins, _tk_datas = [], []
-        # python-build-standalone layout: <home>/bin/python3.x  <home>/lib/libtcl*.so
+        _seen = set()
+
+        def _add_lib(path):
+            real = _os.path.realpath(path)
+            if real not in _seen and _os.path.exists(real):
+                _seen.add(real)
+                _bins.append((real, "."))
+
+        # Method 1: python-build-standalone layout — <home>/lib/libtcl*.so
         _home = _os.path.dirname(_os.path.dirname(sys.executable))
         _lib  = _os.path.join(_home, "lib")
-        if not _os.path.isdir(_lib):
-            return _bins, _tk_datas
-        # Shared libraries (libtcl9.0.so, libtk9.0.so, …)
-        for _pat in ("libtcl*.so*", "libtk*.so*"):
-            for _p in _glob.glob(_os.path.join(_lib, _pat)):
-                if _os.path.exists(_p):
-                    _bins.append((_p, "."))
-        # Tcl/Tk library directories (contain init.tcl, tk.tcl, …)
-        for _pat in ("tcl[0-9]*", "tk[0-9]*"):
-            for _p in _glob.glob(_os.path.join(_lib, _pat)):
-                if _os.path.isdir(_p):
-                    _tk_datas.append((_p, _os.path.basename(_p)))
+        if _os.path.isdir(_lib):
+            for _pat in ("libtcl*.so*", "libtk*.so*"):
+                for _p in _glob.glob(_os.path.join(_lib, _pat)):
+                    _add_lib(_p)
+            # Tcl/Tk library directories (contain init.tcl, tk.tcl, …)
+            for _pat in ("tcl[0-9]*", "tk[0-9]*"):
+                for _p in _glob.glob(_os.path.join(_lib, _pat)):
+                    if _os.path.isdir(_p):
+                        _tk_datas.append((_p, _os.path.basename(_p)))
+
+        # Method 2: ldd fallback — ask the linker what _tkinter.so actually needs.
+        # This catches cases where python-build-standalone stores the libs elsewhere.
+        if not _bins:
+            import importlib.util as _ilu
+            import subprocess as _sp
+            _tkspec = _ilu.find_spec("_tkinter")
+            if _tkspec and _tkspec.origin:
+                try:
+                    _out = _sp.check_output(
+                        ["ldd", _tkspec.origin], text=True, stderr=_sp.DEVNULL
+                    )
+                    for _line in _out.splitlines():
+                        if "libtcl" not in _line and "libtk" not in _line:
+                            continue
+                        _parts = _line.strip().split()
+                        if "=>" in _parts:
+                            _idx = _parts.index("=>")
+                            if _idx + 1 < len(_parts) and _parts[_idx + 1] not in ("", "not"):
+                                _add_lib(_parts[_idx + 1])
+                except Exception:
+                    pass
+
         return _bins, _tk_datas
 
     try:

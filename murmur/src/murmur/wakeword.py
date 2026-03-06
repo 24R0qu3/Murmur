@@ -39,19 +39,34 @@ class WakeWordListener:
         """Load model and start background detection thread.  Returns False if
         openwakeword is not installed."""
         try:
+            import openwakeword
             from openwakeword.model import Model
 
-            # Pass as a named built-in model or as a file path depending on the value
             name = self._model_name
+            # Resolve a short model name (e.g. "hey_jarvis") to its .onnx path.
+            # openwakeword ≥0.4 removed the wakeword_models kwarg; only
+            # wakeword_model_paths (file paths) is accepted.
             if (
                 name.endswith(".onnx")
                 or name.endswith(".tflite")
                 or "/" in name
                 or "\\" in name
             ):
-                self._model = Model(wakeword_model_paths=[name])
+                model_path = name
             else:
-                self._model = Model(wakeword_models=[name])
+                # Match against the bundled pretrained models by stem name.
+                candidates = [
+                    p for p in openwakeword.get_pretrained_model_paths()
+                    if name.lower() in p.lower()
+                ]
+                if not candidates:
+                    print(
+                        f"  Wake word unavailable: no pretrained model matches {name!r}.\n"
+                        f"  Available: {[p.split('/')[-1] for p in openwakeword.get_pretrained_model_paths()]}"
+                    )
+                    return False
+                model_path = candidates[0]
+            self._model = Model(wakeword_model_paths=[model_path])
         except ModuleNotFoundError as e:
             if "openwakeword" in str(e):
                 print(
