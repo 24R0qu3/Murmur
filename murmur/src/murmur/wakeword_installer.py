@@ -110,6 +110,23 @@ def install_wakeword() -> int:
     if result.returncode != 0:
         return result.returncode
 
+    # Download model files (not bundled in the openwakeword package since v0.6.0)
+    if sys.platform == "win32":
+        venv_python = venv_dir / "Scripts" / "python.exe"
+    else:
+        venv_python = venv_dir / "bin" / "python"
+
+    print("  Downloading wake word model files …")
+    result = subprocess.run(
+        [
+            str(venv_python),
+            "-c",
+            "import openwakeword.utils; openwakeword.utils.download_models()",
+        ]
+    )
+    if result.returncode != 0:
+        print("  WARNING: model download failed — wake word detection may not work.")
+
     # Verify
     inject_wakeword_path()
     try:

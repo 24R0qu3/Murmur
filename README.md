@@ -14,9 +14,11 @@ An optional companion MCP server lets Claude Code (and any MCP-compatible client
 - **Fully local** — faster-whisper runs on CPU or CUDA; no API keys, no internet
 - **Cross-platform** — Linux (X11 + Wayland) and Windows
 - **Wake word** — optional always-on detection via openwakeword (`murmur --install-wakeword`)
+- **GUI overlay** — floating recording indicator (tkinter, optional via config)
+- **System tray** — tray icon with status and quit option (optional via config)
 - **Live audio meter** — visual feedback in the terminal while recording
 - **MCP integration** — expose `listen()` and `status()` tools to Claude Code
-- **Configurable** — model size, language, hotkey, device, inject delay
+- **Configurable** — model size, language, hotkey, device, compute type, inject delay
 
 ---
 
@@ -39,11 +41,6 @@ IPC path (used by the MCP server):
 
 ## Requirements
 
-### All platforms
-
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) — `pip install uv` or see uv docs
-
 ### Linux
 
 | Display server | Package needed |
@@ -59,11 +56,16 @@ sudo apt install ydotool      # Wayland
 
 ### Windows
 
-Text is injected via the clipboard (Ctrl+V) — no extra tools needed. All native Windows dependencies (`pywin32`, `pyperclip`, `pyautogui`) are installed automatically by uv.
+No extra tools needed. Text is injected via the clipboard (Ctrl+V).
 
 ### CUDA (optional)
 
-To run the Whisper model on GPU, install the CUDA-enabled build of CTranslate2 and set `device = "cuda"` in your config file.
+Murmur auto-detects CUDA at startup. To force a specific device, set `device = "cuda"` or `device = "cpu"` in your config file.
+
+### Source / pip install only
+
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
 
 ---
 
@@ -77,12 +79,7 @@ murmur --install-wakeword
 
 Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) to be installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`). This downloads `openwakeword` into a user-local directory and leaves the main binary untouched. Restart Murmur afterwards.
 
-Then enable it in your config:
-
-```toml
-wake_word = "hey_jarvis"   # any built-in openwakeword model name
-wake_word_threshold = 0.5  # 0.0–1.0, higher = fewer false positives
-```
+Then set `wake_word` in your config (see [Configuration](#configuration) below).
 
 Available built-in model names: `hey_jarvis`, `alexa`, `hey_mycroft`, `hey_rhasspy`, and others — see the [openwakeword model list](https://github.com/dscripka/openWakeWord#pre-trained-models). Custom `.onnx` / `.tflite` model files are also supported (use the file path as the value).
 
@@ -147,6 +144,10 @@ Loading model...
 Ready.
 
   F9      hold to record, release to transcribe + inject
+  language  de
+  model     base
+  device    cuda  (auto-detected)
+  compute   int8_float32
   Ctrl+C  exit
 ```
 
@@ -162,8 +163,21 @@ Create the file if it doesn't exist. All fields are optional — omitted fields 
 model           = "base"   # Whisper model size (see table below)
 language        = "de"     # ISO 639-1 code, or "" to auto-detect
 hotkey          = "F9"     # Any key name recognised by pynput
-device          = "cpu"    # "cpu" or "cuda"
+device          = "auto"   # "auto", "cpu", or "cuda"
+compute_type    = "auto"   # "auto", "int8", "int8_float32", "float16", "float32"
 inject_delay_ms = 0        # ms to wait before injecting (helps some apps)
+
+# GUI
+tray                   = true   # system tray icon
+overlay                = true   # floating recording indicator
+overlay_always_on_top  = true
+overlay_raise_on_hotkey = true
+overlay_x              = -1     # position in pixels; -1 = auto (bottom-right)
+overlay_y              = -1
+
+# Wake word (requires murmur --install-wakeword)
+wake_word           = ""    # e.g. "hey_jarvis" — leave empty to disable
+wake_word_threshold = 0.5   # 0.0–1.0, higher = fewer false positives
 ```
 
 ### Model sizes

@@ -39,34 +39,35 @@ class WakeWordListener:
         """Load model and start background detection thread.  Returns False if
         openwakeword is not installed."""
         try:
-            import openwakeword
+            import os as _os
+
+            import openwakeword as _oww
             from openwakeword.model import Model
 
             name = self._model_name
-            # Resolve a short model name (e.g. "hey_jarvis") to its .onnx path.
-            # openwakeword ≥0.4 removed the wakeword_models kwarg; only
-            # wakeword_model_paths (file paths) is accepted.
+            # Custom model path: pass directly.
             if (
                 name.endswith(".onnx")
                 or name.endswith(".tflite")
                 or "/" in name
                 or "\\" in name
             ):
-                model_path = name
+                self._model = Model(wakeword_models=[name])
             else:
-                # Match against the bundled pretrained models by stem name.
-                all_paths = openwakeword.get_pretrained_model_paths()
-                candidates = [p for p in all_paths if name.lower() in p.lower()]
-                if not candidates:
-                    print(
-                        f"  Wake word unavailable: no pretrained model matches {name!r}.\n"
-                        f"  Available: {[p.split('/')[-1] for p in all_paths]}"
+                # Named built-in: prefer the .onnx variant so onnxruntime is used
+                # instead of tflite_runtime.  tflite_runtime's C extension crashes
+                # when NumPy 2.x is already loaded in the host process (_ARRAY_API).
+                onnx = (
+                    _oww.MODELS.get(name, {})
+                    .get("model_path", "")
+                    .replace(".tflite", ".onnx")
+                )
+                if onnx and _os.path.exists(onnx):
+                    self._model = Model(
+                        wakeword_models=[onnx], inference_framework="onnx"
                     )
-                    return False
-                # Prefer ONNX over TFLite — TFLite requires a separate runtime.
-                onnx = [p for p in candidates if p.endswith(".onnx")]
-                model_path = (onnx or candidates)[0]
-            self._model = Model(wakeword_model_paths=[model_path])
+                else:
+                    self._model = Model(wakeword_models=[name])
         except ModuleNotFoundError as e:
             if "openwakeword" in str(e):
                 print(
