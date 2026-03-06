@@ -6,6 +6,11 @@ side directory so the main binary stays slim and no system-wide pip access
 is required.  A venv (rather than pip --target) is used because packages
 with native C extensions (numpy, scipy, …) don't work reliably when
 installed with --target.
+
+IMPORTANT: the venv must use the same Python major.minor as the running
+interpreter.  When murmur is a PyInstaller binary it embeds Python 3.11;
+installing into a system Python 3.12 venv produces .cpython-312-*.so
+extensions that Python 3.11 cannot load (broken scipy symptom).
 """
 
 import shutil
@@ -16,6 +21,7 @@ from pathlib import Path
 from platformdirs import user_data_dir
 
 _PACKAGE = "openwakeword"
+_PY_VER = f"{sys.version_info.major}.{sys.version_info.minor}"
 
 
 def get_wakeword_dir() -> Path:
@@ -34,17 +40,29 @@ def get_venv_dir() -> Path:
 
 
 def _find_venv_site_packages(venv_dir: Path) -> Path | None:
-    """Return the site-packages directory inside a venv, or None."""
+    """Return the site-packages directory inside a venv, or None.
+
+    Prefers a directory matching the running interpreter's Python version so
+    that C-extension wheels (.cpython-XY-*.so) are always ABI-compatible.
+    """
     if sys.platform == "win32":
         sp = venv_dir / "Lib" / "site-packages"
         return sp if sp.exists() else None
     lib = venv_dir / "lib"
-    if lib.exists():
-        for entry in sorted(lib.iterdir()):
-            if entry.is_dir() and entry.name.startswith("python"):
-                sp = entry / "site-packages"
-                if sp.exists():
-                    return sp
+    if not lib.exists():
+        return None
+    # Look for an exact match first (e.g. python3.11), then any python* dir.
+    target = f"python{_PY_VER}"
+    for entry in sorted(lib.iterdir()):
+        if entry.is_dir() and entry.name == target:
+            sp = entry / "site-packages"
+            if sp.exists():
+                return sp
+    for entry in sorted(lib.iterdir()):
+        if entry.is_dir() and entry.name.startswith("python"):
+            sp = entry / "site-packages"
+            if sp.exists():
+                return sp
     return None
 
 
@@ -76,15 +94,19 @@ def install_wakeword() -> int:
     venv_dir = get_venv_dir()
     venv_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    # Remove a broken/incomplete venv from a previous failed install attempt.
-    if venv_dir.exists() and _find_venv_site_packages(venv_dir) is None:
-        shutil.rmtree(venv_dir)
+    # Remove a stale venv if it targets the wrong Python version or is incomplete.
+    if venv_dir.exists():
+        sp = _find_venv_site_packages(venv_dir)
+        wrong_version = sp is not None and f"python{_PY_VER}" not in str(sp)
+        if sp is None or wrong_version:
+            print(f"  Removing incompatible venv (wrong Python version or incomplete) …")
+            shutil.rmtree(venv_dir)
 
-    print(f"  Creating virtual environment at {venv_dir} …")
+    print(f"  Creating virtual environment (Python {_PY_VER}) at {venv_dir} …")
 
     if shutil.which("uv"):
-        # uv manages packages itself — no pip needed inside the venv.
-        result = subprocess.run(["uv", "venv", str(venv_dir)])
+        # uv can download the exact Python version if not present on the system.
+        result = subprocess.run(["uv", "venv", "--python", _PY_VER, str(venv_dir)])
         if result.returncode != 0:
             print("  ERROR: failed to create virtual environment.")
             return result.returncode
@@ -97,12 +119,12 @@ def install_wakeword() -> int:
             return result.returncode
 
     else:
-        # Fall back to a system Python + the venv's own pip.
+        # Fall back to a system Python matching the running interpreter version.
         python = _find_system_python()
         if python is None:
             print(
-                "  ERROR: could not find uv or Python 3 to create a virtual environment.\n"
-                "  Install uv (https://docs.astral.sh/uv/) or Python 3, then retry."
+                f"  ERROR: could not find uv or Python {_PY_VER} to create a virtual environment.\n"
+                "  Install uv (https://docs.astral.sh/uv/) and retry."
             )
             return 1
 
@@ -139,8 +161,9 @@ def install_wakeword() -> int:
 
 
 def _find_system_python() -> str | None:
-    """Return a system Python executable suitable for creating a venv."""
-    candidates = ["python3", "python"]
+    """Return a system Python matching the running interpreter's version."""
+    # Prefer an exact version match — critical for C-extension ABI compatibility.
+    candidates = [f"python{_PY_VER}", f"python{sys.version_info.major}", "python3", "python"]
     if sys.platform == "win32":
         candidates = ["py"] + candidates
     for python in candidates:

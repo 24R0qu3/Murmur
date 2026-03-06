@@ -25,7 +25,17 @@ _COLLECT_PKGS = [
 
 datas:         list = []
 binaries:      list = []
-hiddenimports: list = ["tomllib", "wave", "tkinter", "tkinter.ttk", "_tkinter"]
+hiddenimports: list = [
+    "tomllib", "wave", "tkinter", "tkinter.ttk", "_tkinter",
+    # Full stdlib packages needed by openwakeword's dependency chain (requests,
+    # tqdm, …) that PyInstaller does not detect automatically from the main app:
+    "http", "http.client", "http.cookies", "http.cookiejar",
+    "http.server", "http.cookiejar",
+    "urllib", "urllib.request", "urllib.parse", "urllib.error", "urllib.response",
+    "email", "email.mime", "email.mime.text", "email.mime.multipart",
+    "xml.etree.ElementTree",
+    "multiprocessing",
+]
 
 for _pkg in _COLLECT_PKGS:
     try:
