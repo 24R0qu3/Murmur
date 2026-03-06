@@ -55,18 +55,17 @@ class WakeWordListener:
                 model_path = name
             else:
                 # Match against the bundled pretrained models by stem name.
-                candidates = [
-                    p
-                    for p in openwakeword.get_pretrained_model_paths()
-                    if name.lower() in p.lower()
-                ]
+                all_paths = openwakeword.get_pretrained_model_paths()
+                candidates = [p for p in all_paths if name.lower() in p.lower()]
                 if not candidates:
                     print(
                         f"  Wake word unavailable: no pretrained model matches {name!r}.\n"
-                        f"  Available: {[p.split('/')[-1] for p in openwakeword.get_pretrained_model_paths()]}"
+                        f"  Available: {[p.split('/')[-1] for p in all_paths]}"
                     )
                     return False
-                model_path = candidates[0]
+                # Prefer ONNX over TFLite — TFLite requires a separate runtime.
+                onnx = [p for p in candidates if p.endswith(".onnx")]
+                model_path = (onnx or candidates)[0]
             self._model = Model(wakeword_model_paths=[model_path])
         except ModuleNotFoundError as e:
             if "openwakeword" in str(e):

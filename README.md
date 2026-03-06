@@ -75,7 +75,7 @@ Murmur supports always-on wake word detection via [openwakeword](https://github.
 murmur --install-wakeword
 ```
 
-This downloads `openwakeword` into a user-local directory and leaves the main binary untouched. Restart Murmur afterwards.
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) to be installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`). This downloads `openwakeword` into a user-local directory and leaves the main binary untouched. Restart Murmur afterwards.
 
 Then enable it in your config:
 
