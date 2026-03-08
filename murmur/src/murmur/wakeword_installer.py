@@ -124,7 +124,9 @@ def install_wakeword() -> int:
             "-c",
             "import openwakeword.utils; openwakeword.utils.download_models()",
         ],
-        env={**os.environ, "PYTHONPATH": "", "PYTHONHOME": ""},
+        env={
+            k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")
+        },
     )
     if result.returncode != 0:
         print(
