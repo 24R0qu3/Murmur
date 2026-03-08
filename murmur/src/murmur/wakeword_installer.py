@@ -8,7 +8,6 @@ openwakeword into it.  No system Python fallback — uv can download the right
 Python version automatically if it is not already present on the system.
 """
 
-import os
 import shutil
 import subprocess
 import sys
@@ -111,32 +110,23 @@ def install_wakeword() -> int:
     if result.returncode != 0:
         return result.returncode
 
-    # Download model files (not bundled in the openwakeword package since v0.6.0)
-    if sys.platform == "win32":
-        venv_python = venv_dir / "Scripts" / "python.exe"
-    else:
-        venv_python = venv_dir / "bin" / "python"
+    # Download model files in-process (avoids PyInstaller subprocess env issues)
+    inject_wakeword_path()
+    try:
+        import openwakeword.utils as _oww_utils
 
-    print("  Downloading wake word model files …")
-    result = subprocess.run(
-        [
-            str(venv_python),
-            "-c",
-            "import openwakeword.utils; openwakeword.utils.download_models()",
-        ],
-        env={
-            k: v
-            for k, v in os.environ.items()
-            if k
-            not in ("PYTHONPATH", "PYTHONHOME", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE")
-        },
-    )
-    if result.returncode != 0:
+        print("  Downloading wake word model files …")
+        _oww_utils.download_models()
+    except ImportError:
         print(
-            "  ERROR: model download failed.\n"
-            "  Check your internet connection and re-run:  murmur --install-wakeword\n"
-            f"  Or download manually:\n"
-            f'    & "{venv_python}" -c "import openwakeword.utils; openwakeword.utils.download_models()"'
+            f"  WARNING: install reported success but openwakeword is not importable.\n"
+            f"  Venv directory: {venv_dir}"
+        )
+        return 1
+    except Exception as e:
+        print(
+            f"  ERROR: model download failed: {e}\n"
+            "  Check your internet connection and re-run:  murmur --install-wakeword"
         )
         return 1
 
