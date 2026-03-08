@@ -3,26 +3,26 @@
 #   irm https://raw.githubusercontent.com/24R0qu3/Murmur/main/install.ps1 | iex
 #   # or with a custom install location:
 #   $env:INSTALL_DIR = "C:\Tools"; irm .../install.ps1 | iex
-param(
-    [string]$InstallDir = $env:INSTALL_DIR
-)
-
 $ErrorActionPreference = "Stop"
 
-$Repo    = "24R0qu3/Murmur"
-$BinName = "murmur"
-
-if (-not $InstallDir) {
-    $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\$BinName"
-}
+$Repo       = "24R0qu3/Murmur"
+$BinName    = "murmur"
+$Artifact   = "murmur-windows-x86_64.exe"
+$InstallDir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR } `
+              else { Join-Path $env:LOCALAPPDATA "Programs\murmur" }
 
 # ── Resolve latest release tag ───────────────────────────────────────────────
 Write-Host "Fetching latest release info..."
 $Release = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
 $Tag     = $Release.tag_name
 
+if (-not $Tag) {
+    Write-Error "Could not determine latest release tag."
+    exit 1
+}
+
 # ── Download binary ──────────────────────────────────────────────────────────
-$Url  = "https://github.com/$Repo/releases/download/$Tag/${BinName}-${Tag}-windows.exe"
+$Url  = "https://github.com/$Repo/releases/download/$Tag/$Artifact"
 $Dest = Join-Path $InstallDir "$BinName.exe"
 
 Write-Host "Downloading $BinName $Tag..."
@@ -32,11 +32,15 @@ Invoke-WebRequest -Uri $Url -OutFile $Dest
 Write-Host "Installed to $Dest"
 
 # ── Add to user PATH if not already present ──────────────────────────────────
-$UserPath = [Environment]::GetEnvironmentVariable("PATH", "User") ?? ""
+$UserPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if (-not $UserPath) { $UserPath = "" }
 if ($UserPath -notlike "*$InstallDir*") {
     $NewPath = ($UserPath.TrimEnd(";") + ";$InstallDir").TrimStart(";")
     [Environment]::SetEnvironmentVariable("PATH", $NewPath, "User")
-    Write-Host "Added $InstallDir to user PATH (restart your terminal to take effect)"
+    Write-Host ""
+    Write-Host "  Added $InstallDir to your PATH."
+    Write-Host "  Restart your terminal for it to take effect."
 }
 
+Write-Host ""
 Write-Host "Done. Run: $BinName"
