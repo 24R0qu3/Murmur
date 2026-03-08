@@ -67,7 +67,12 @@ class WakeWordListener:
                         wakeword_models=[onnx], inference_framework="onnx"
                     )
                 else:
-                    self._model = Model(wakeword_models=[name])
+                    # onnx path not found on disk — let openwakeword resolve it.
+                    # Always specify onnx so tflite_runtime is never attempted
+                    # (tflite_runtime is not available on Windows).
+                    self._model = Model(
+                        wakeword_models=[name], inference_framework="onnx"
+                    )
         except ModuleNotFoundError as e:
             if "openwakeword" in str(e):
                 print(
