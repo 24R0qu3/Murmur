@@ -1,6 +1,8 @@
 import argparse
 import itertools
+import shutil
 import signal
+import sys
 import threading
 import time
 from pathlib import Path
@@ -37,6 +39,48 @@ def _run_recording_display(stop: threading.Event, recorder: AudioRecorder):
         time.sleep(0.08)
 
 
+def _uninstall() -> int:
+    from platformdirs import user_data_dir, user_log_dir
+
+    removed = []
+
+    # Side-installs: wakeword and cuda venvs + model downloads
+    data_dir = Path(user_data_dir("murmur", appauthor=False))
+    if data_dir.exists():
+        shutil.rmtree(data_dir)
+        removed.append(str(data_dir))
+
+    # Config
+    config_dir = Path.home() / ".config" / "murmur"
+    if config_dir.exists():
+        shutil.rmtree(config_dir)
+        removed.append(str(config_dir))
+
+    # Logs (platformdirs puts these separately on some platforms)
+    log_dir = Path(user_log_dir("murmur", appauthor=False))
+    if log_dir.exists() and log_dir != data_dir:
+        shutil.rmtree(log_dir)
+        removed.append(str(log_dir))
+
+    if removed:
+        print("  Removed:")
+        for p in removed:
+            print(f"    {p}")
+    else:
+        print("  Nothing to remove.")
+
+    # The binary can't delete itself while running — print manual step
+    if sys.platform == "win32":
+        print(
+            "\n  To remove the binary:\n"
+            '    Remove-Item "$env:LOCALAPPDATA\\Programs\\murmur" -Recurse -Force'
+        )
+    else:
+        print("\n  To remove the binary:\n    rm ~/.local/bin/murmur")
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--log", default="WARNING", choices=LEVELS)
@@ -52,6 +96,11 @@ def main():
         action="store_true",
         help="Install CUDA runtime libraries for GPU acceleration and exit.",
     )
+    parser.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Remove all murmur data (wakeword, cuda, logs) and exit.",
+    )
     args, _ = parser.parse_known_args()
 
     # Install wake word support and exit if requested
@@ -60,6 +109,9 @@ def main():
 
     if args.install_cuda:
         raise SystemExit(install_cuda())
+
+    if args.uninstall:
+        raise SystemExit(_uninstall())
 
     # Inject side-installed wakeword path before any imports that need it
     inject_wakeword_path()
