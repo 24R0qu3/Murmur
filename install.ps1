@@ -35,7 +35,7 @@ Write-Host "Installed to $Dest"
 $UserPath = [Environment]::GetEnvironmentVariable("PATH", "User")
 if (-not $UserPath) { $UserPath = "" }
 if ($UserPath -notlike "*$InstallDir*") {
-    $NewPath = ($UserPath.TrimEnd(";") + ";$InstallDir").TrimStart(";")
+    $NewPath = ($InstallDir + ";" + $UserPath.TrimStart(";")).TrimEnd(";")
     [Environment]::SetEnvironmentVariable("PATH", $NewPath, "User")
     Write-Host ""
     Write-Host "  Added $InstallDir to your PATH."
