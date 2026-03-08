@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .audio import AudioRecorder
 from .config import load_config
+from .cuda_installer import install_cuda
 from .hotkey import HotkeyListener
 from .inject import inject_text
 from .ipc import IPCServer
@@ -46,11 +47,19 @@ def main():
         action="store_true",
         help="Install the optional openwakeword package and exit.",
     )
+    parser.add_argument(
+        "--install-cuda",
+        action="store_true",
+        help="Install CUDA runtime libraries for GPU acceleration and exit.",
+    )
     args, _ = parser.parse_known_args()
 
     # Install wake word support and exit if requested
     if args.install_wakeword:
         raise SystemExit(install_wakeword())
+
+    if args.install_cuda:
+        raise SystemExit(install_cuda())
 
     # Inject side-installed wakeword path before any imports that need it
     inject_wakeword_path()

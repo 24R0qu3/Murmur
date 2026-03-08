@@ -8,6 +8,7 @@ openwakeword into it.  No system Python fallback — uv can download the right
 Python version automatically if it is not already present on the system.
 """
 
+import os
 import shutil
 import subprocess
 import sys
@@ -122,23 +123,17 @@ def install_wakeword() -> int:
             str(venv_python),
             "-c",
             "import openwakeword.utils; openwakeword.utils.download_models()",
-        ]
+        ],
+        env={**os.environ, "PYTHONPATH": "", "PYTHONHOME": ""},
     )
     if result.returncode != 0:
-        print("  WARNING: model download failed — wake word detection may not work.")
-
-    # Verify
-    inject_wakeword_path()
-    try:
-        import importlib.util
-
-        if importlib.util.find_spec("openwakeword") is None:
-            raise ImportError("openwakeword not found after install")
-        print("  Done. Restart murmur to enable wake word detection.")
-        return 0
-    except Exception as e:
         print(
-            f"  WARNING: install reported success but openwakeword is not importable: {e}\n"
-            f"  Venv directory: {venv_dir}"
+            "  ERROR: model download failed.\n"
+            "  Check your internet connection and re-run:  murmur --install-wakeword\n"
+            f"  Or download manually:\n"
+            f'    & "{venv_python}" -c "import openwakeword.utils; openwakeword.utils.download_models()"'
         )
         return 1
+
+    print("  Done. Restart murmur to enable wake word detection.")
+    return 0

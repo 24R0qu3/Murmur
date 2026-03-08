@@ -86,7 +86,7 @@ class WakeWordListener:
                 )
             return False
         except Exception as e:
-            print(f"  Wake word unavailable: {e}")
+            print(f"  Wake word unavailable: {e}\n  Re-run:  murmur --install-wakeword")
             return False
 
         self._on_detected = on_detected

@@ -26,7 +26,29 @@ def _add_cuda_dll_dirs() -> None:
             if os.path.isdir(dll_dir):
                 dirs.append(dll_dir)
 
-    # System CUDA Toolkit install
+    # murmur --install-cuda side-install
+    try:
+        from .cuda_installer import get_cuda_dll_dirs
+
+        dirs.extend(d for d in get_cuda_dll_dirs() if d not in dirs)
+    except Exception:
+        pass
+
+    # CUDA_PATH env var set by the NVIDIA CUDA Toolkit installer
+    cuda_path = os.environ.get("CUDA_PATH") or os.environ.get("CUDA_HOME")
+    if cuda_path:
+        bin_dir = os.path.join(cuda_path, "bin")
+        if os.path.isdir(bin_dir):
+            dirs.append(bin_dir)
+
+    # Conda / mamba environments
+    conda_prefix = os.environ.get("CONDA_PREFIX") or os.environ.get("CONDA_DEFAULT_ENV")
+    if conda_prefix and os.path.isabs(conda_prefix):
+        conda_bin = os.path.join(conda_prefix, "Library", "bin")
+        if os.path.isdir(conda_bin):
+            dirs.append(conda_bin)
+
+    # System CUDA Toolkit install (common default locations)
     for pattern in [
         r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*\bin",
         r"C:\CUDA\v*\bin",
@@ -109,7 +131,8 @@ class Transcriber:
         """Reload the model on CPU (called after a CUDA failure)."""
         print(
             "  WARNING: CUDA unavailable — reloading model on CPU.\n"
-            '  Set device = "cpu" in config.toml to avoid this at startup.'
+            "  Run:  murmur --install-cuda  to install CUDA libraries.\n"
+            '  Or set device = "cpu" in config.toml to silence this warning.'
         )
         self._model = WhisperModel(self._model_name, device="cpu")
         self.device = "cpu"
