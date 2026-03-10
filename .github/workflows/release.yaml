@@ -54,18 +54,18 @@ jobs:
         working-directory: murmur
         run: uv python install 3.11
 
-      - name: Install wxPython (Linux, from extras server — not on PyPI)
+      - name: Install dependencies (Linux — wxPython wheel from extras server)
         if: runner.os == 'Linux'
         working-directory: murmur
         run: |
-          uv pip install \
+          uv pip install . \
             --find-links https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 \
-            --no-build \
-            wxPython
+            --no-build
 
-      - name: Install dependencies
+      - name: Install dependencies (Windows / macOS)
+        if: runner.os != 'Linux'
         working-directory: murmur
-        run: uv sync --no-install-package wxpython
+        run: uv sync
 
       - name: Install PyInstaller
         working-directory: murmur

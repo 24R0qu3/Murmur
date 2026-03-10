@@ -14,8 +14,12 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv python install 3.11
         working-directory: murmur
-      - run: uv sync --extra test
+      - name: Install dependencies (wxPython wheel from extras server)
         working-directory: murmur
+        run: |
+          uv pip install ".[test]" \
+            --find-links https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 \
+            --no-build
       - run: uv run ruff check .
         working-directory: murmur
       - run: uv run ruff format --check .

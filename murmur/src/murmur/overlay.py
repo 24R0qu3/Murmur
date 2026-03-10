@@ -260,15 +260,16 @@ class OverlayWindow(wx.Frame):
             return
         self.Show()
         self.Raise()
-        self.SetFocus()
         if sys.platform not in ("win32", "darwin"):
-            # GTK focus-stealing prevention blocks Raise(); use xdotool on X11
+            # GTK ignores Raise() from non-focused apps; use xdotool windowraise.
+            # windowactivate is avoided — it triggers synthetic clicks on
+            # click-to-focus WMs, causing the settings dialog to open spuriously.
             import shutil
             import subprocess
 
             if shutil.which("xdotool"):
                 subprocess.Popen(
-                    ["xdotool", "windowactivate", str(self.GetHandle())],
+                    ["xdotool", "windowraise", str(self.GetHandle())],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
