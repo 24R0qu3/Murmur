@@ -1,5 +1,8 @@
+import sys
 import tkinter as tk
 from typing import Callable
+
+_FONT_FAMILY = "Segoe UI" if sys.platform == "win32" else "DejaVu Sans"
 
 _BG = "#2b2b2b"
 _BG_DARK = "#1e1e1e"
@@ -81,7 +84,7 @@ class OverlayWindow:
             text="idle",
             fg=_FG_DIM,
             bg=_BG,
-            font=("Segoe UI", 9),
+            font=(_FONT_FAMILY, 9),
             width=11,
             anchor="w",
         )
@@ -105,7 +108,7 @@ class OverlayWindow:
             height=6,
             bg=_BG_DARK,
             fg=_FG,
-            font=("Segoe UI", 9),
+            font=(_FONT_FAMILY, 9),
             relief=tk.FLAT,
             state=tk.DISABLED,
             wrap=tk.WORD,
@@ -132,7 +135,7 @@ class OverlayWindow:
             activebackground=hover_bg,
             activeforeground="#ffffff",
             relief=tk.FLAT,
-            font=("Segoe UI", 10),
+            font=(_FONT_FAMILY, 10),
             command=cmd,
             cursor="hand2",
             padx=4,
