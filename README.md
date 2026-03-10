@@ -4,7 +4,7 @@
 
 Murmur is a push-to-talk voice transcription tool. Press and hold a hotkey (default **F9**), say something, release — the text is typed into whatever window is active. Everything runs locally on your machine using [faster-whisper](https://github.com/SYSTRAN/faster-whisper). No internet connection, no account, no data sent anywhere.
 
-Works on **Linux** and **Windows**.
+Works on **Linux**, **Windows**, and **macOS**.
 
 ---
 
@@ -299,7 +299,7 @@ Murmur/
 │       ├── inject.py            # Text injection (xdotool / ydotool / clipboard)
 │       ├── hotkey.py            # Global hotkey (pynput)
 │       ├── ipc.py               # JSON-over-socket server
-│       ├── overlay.py           # Floating tkinter toolbar
+│       ├── overlay.py           # Floating overlay toolbar (wxPython)
 │       ├── tray.py              # System tray icon (pystray)
 │       ├── settings_dialog.py   # Settings UI
 │       ├── wakeword.py          # Wake word detection (openwakeword)

@@ -17,6 +17,7 @@ dependencies = [
     "pyautogui; sys_platform == 'win32'",
     "pyperclip; sys_platform == 'win32'",
     "pywin32; sys_platform == 'win32'",
+    "wxpython",
 ]
 
 [project.optional-dependencies]

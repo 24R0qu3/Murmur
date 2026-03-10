@@ -1,35 +1,94 @@
 import sys
-import tkinter as tk
 from typing import Callable
 
-_FONT_FAMILY = "Segoe UI" if sys.platform == "win32" else "DejaVu Sans"
+import wx
 
-_BG = "#2b2b2b"
-_BG_DARK = "#1e1e1e"
-_FG = "#cccccc"
-_FG_DIM = "#888888"
-_ACCENT = "#4c9be8"
+_BG = wx.Colour(43, 43, 43)  # #2b2b2b
+_BG_DARK = wx.Colour(30, 30, 30)  # #1e1e1e
+_FG = wx.Colour(204, 204, 204)  # #cccccc
+_FG_DIM = wx.Colour(136, 136, 136)  # #888888
+
 _BAR_W = 140
 _BAR_H = 12
 
 _STATE_COLORS = {
-    "idle": "#888888",
-    "recording": "#dd3333",
-    "transcribing": "#dd9920",
+    "idle": wx.Colour(136, 136, 136),
+    "recording": wx.Colour(221, 51, 51),
+    "transcribing": wx.Colour(221, 153, 32),
 }
 
 
-class OverlayWindow:
+class _DotPanel(wx.Panel):
+    """Small custom-drawn circle showing the current state color."""
+
+    def __init__(self, parent):
+        super().__init__(parent, size=(14, 14))
+        self.SetBackgroundColour(_BG)
+        self._color = _STATE_COLORS["idle"]
+        self.Bind(wx.EVT_PAINT, self._on_paint)
+        self.Bind(wx.EVT_ERASE_BACKGROUND, lambda e: None)
+
+    def set_color(self, color: wx.Colour):
+        self._color = color
+        self.Refresh()
+
+    def _on_paint(self, event):
+        dc = wx.PaintDC(self)
+        dc.SetBackground(wx.Brush(_BG))
+        dc.Clear()
+        dc.SetBrush(wx.Brush(self._color))
+        dc.SetPen(wx.TRANSPARENT_PEN)
+        dc.DrawCircle(7, 7, 5)
+
+
+class _LevelBar(wx.Panel):
+    """Custom-drawn level bar (filled rectangle with optional border)."""
+
+    def __init__(self, parent):
+        super().__init__(parent, size=(_BAR_W, _BAR_H))
+        self.SetBackgroundColour(_BG_DARK)
+        self._fill = 0
+        self._border_color = wx.Colour(68, 68, 68)  # #444
+        self.Bind(wx.EVT_PAINT, self._on_paint)
+        self.Bind(wx.EVT_ERASE_BACKGROUND, lambda e: None)
+
+    def set_fill(self, fraction: float, border_color: wx.Colour = None):
+        self._fill = max(0.0, min(1.0, fraction))
+        if border_color is not None:
+            self._border_color = border_color
+        self.Refresh()
+
+    def _on_paint(self, event):
+        dc = wx.PaintDC(self)
+        w, h = self.GetSize()
+        dc.SetBackground(wx.Brush(_BG_DARK))
+        dc.Clear()
+        # Fill
+        filled_w = int(self._fill * w)
+        if filled_w > 0:
+            dc.SetBrush(wx.Brush(wx.Colour(76, 175, 80)))  # #4caf50
+            dc.SetPen(wx.TRANSPARENT_PEN)
+            dc.DrawRectangle(0, 0, filled_w, h)
+        # Border
+        dc.SetBrush(wx.TRANSPARENT_BRUSH)
+        dc.SetPen(wx.Pen(self._border_color, 1))
+        dc.DrawRectangle(0, 0, w, h)
+
+
+class OverlayWindow(wx.Frame):
     def __init__(
         self,
-        root: tk.Tk,
         config,
         on_settings: Callable,
         on_quit: Callable,
         get_rms: Callable,
         on_move: Callable = None,
     ):
-        self._root = root
+        style = wx.FRAME_NO_TASKBAR | wx.STAY_ON_TOP | wx.BORDER_NONE
+        if sys.platform == "darwin":
+            style |= wx.FRAME_TOOL_WINDOW
+        super().__init__(None, style=style)
+
         self._config = config
         self._on_settings = on_settings
         self._on_quit = on_quit
@@ -38,219 +97,223 @@ class OverlayWindow:
         self._state = "idle"
         self._history: list[str] = []
         self._history_visible = False
-        self._drag_x = 0
-        self._drag_y = 0
+        self._drag_start_pos = None
 
+        self.SetBackgroundColour(_BG)
         self._build()
         self._place_initial()
-        self._poll_level()
+
+        if not config.overlay_always_on_top:
+            self.SetWindowStyleFlag(self.GetWindowStyleFlag() & ~wx.STAY_ON_TOP)
+
+        self._timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_timer, self._timer)
+        self._timer.Start(80)
+
+        self.Show()
 
     # ── Build UI ──────────────────────────────────────────────────────────────
 
     def _build(self):
-        root = self._root
-        root.overrideredirect(True)
-        root.configure(bg=_BG)
-        root.attributes("-topmost", self._config.overlay_always_on_top)
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
 
         # ── Toolbar row ───────────────────────────────────────────────────────
-        bar = tk.Frame(root, bg=_BG, padx=6, pady=5)
-        bar.pack(fill=tk.X)
+        self._toolbar = wx.Panel(self)
+        self._toolbar.SetBackgroundColour(_BG)
+        bar_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         # Status dot
-        self._dot_cv = tk.Canvas(bar, width=12, height=12, bg=_BG, highlightthickness=0)
-        self._dot_cv.pack(side=tk.LEFT, padx=(0, 5))
-        self._dot = self._dot_cv.create_oval(
-            1, 1, 11, 11, fill=_STATE_COLORS["idle"], outline=""
-        )
+        self._dot = _DotPanel(self._toolbar)
+        bar_sizer.Add(self._dot, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT | wx.RIGHT, 4)
 
         # Level bar
-        self._bar_cv = tk.Canvas(
-            bar,
-            width=_BAR_W,
-            height=_BAR_H,
-            bg=_BG_DARK,
-            highlightthickness=1,
-            highlightbackground="#444",
-        )
-        self._bar_cv.pack(side=tk.LEFT, padx=(0, 8))
-        self._bar_fill = self._bar_cv.create_rectangle(
-            0, 0, 0, _BAR_H, fill="#4caf50", outline=""
-        )
+        self._level_bar = _LevelBar(self._toolbar)
+        bar_sizer.Add(self._level_bar, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
 
         # Status label
-        self._status_lbl = tk.Label(
-            bar,
-            text="idle",
-            fg=_FG_DIM,
-            bg=_BG,
-            font=(_FONT_FAMILY, 9),
-            width=11,
-            anchor="w",
-        )
-        self._status_lbl.pack(side=tk.LEFT, padx=(0, 6))
+        self._status_lbl = wx.StaticText(self._toolbar, label="idle")
+        self._status_lbl.SetForegroundColour(_FG_DIM)
+        self._status_lbl.SetBackgroundColour(_BG)
+        self._status_lbl.SetMinSize((88, -1))
+        bar_sizer.Add(self._status_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
 
-        # History toggle
-        self._hist_btn = self._icon_btn(bar, "▼", self._toggle_history)
-        self._hist_btn.pack(side=tk.LEFT, padx=(0, 2))
+        # History toggle button
+        self._hist_btn = self._make_btn(self._toolbar, "▼", self._toggle_history)
+        bar_sizer.Add(self._hist_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 2)
 
-        # Settings
-        self._icon_btn(bar, "⚙", self._on_settings).pack(side=tk.LEFT, padx=(0, 2))
+        # Settings button
+        settings_btn = self._make_btn(self._toolbar, "⚙", self._on_settings)
+        bar_sizer.Add(settings_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 2)
 
-        # Quit (X)
-        self._icon_btn(bar, "✕", self._on_quit, hover_bg="#aa2222").pack(side=tk.LEFT)
+        # Quit button
+        quit_btn = self._make_btn(self._toolbar, "✕", self._on_quit)
+        bar_sizer.Add(quit_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 4)
+
+        self._toolbar.SetSizer(bar_sizer)
+        bar_sizer.Fit(self._toolbar)
+        main_sizer.Add(self._toolbar, 0, wx.EXPAND)
 
         # ── History panel (hidden initially) ──────────────────────────────────
-        self._hist_frame = tk.Frame(root, bg=_BG_DARK)
+        self._hist_panel = wx.Panel(self)
+        self._hist_panel.SetBackgroundColour(_BG_DARK)
+        hist_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        self._hist_text = tk.Text(
-            self._hist_frame,
-            height=6,
-            bg=_BG_DARK,
-            fg=_FG,
-            font=(_FONT_FAMILY, 9),
-            relief=tk.FLAT,
-            state=tk.DISABLED,
-            wrap=tk.WORD,
-            insertbackground=_FG,
-            selectbackground=_ACCENT,
+        self._hist_text = wx.TextCtrl(
+            self._hist_panel,
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.BORDER_NONE,
+            size=(_BAR_W + 200, 100),
         )
-        sb = tk.Scrollbar(self._hist_frame, command=self._hist_text.yview, bg=_BG)
-        self._hist_text.configure(yscrollcommand=sb.set)
-        sb.pack(side=tk.RIGHT, fill=tk.Y)
-        self._hist_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self._hist_text.SetBackgroundColour(_BG_DARK)
+        self._hist_text.SetForegroundColour(_FG)
+        hist_sizer.Add(self._hist_text, 1, wx.EXPAND | wx.ALL, 4)
+        self._hist_panel.SetSizer(hist_sizer)
+        self._hist_panel.Hide()
+        main_sizer.Add(self._hist_panel, 0, wx.EXPAND)
+
+        self.SetSizer(main_sizer)
+        main_sizer.Fit(self)
 
         # ── Drag bindings ─────────────────────────────────────────────────────
-        for w in (bar, self._status_lbl, self._bar_cv):
-            w.bind("<ButtonPress-1>", self._drag_start)
-            w.bind("<B1-Motion>", self._drag_motion)
-            w.bind("<ButtonRelease-1>", self._drag_end)
+        for w in (self._toolbar, self._status_lbl, self._level_bar):
+            w.Bind(wx.EVT_LEFT_DOWN, self._drag_start)
+            w.Bind(wx.EVT_LEFT_UP, self._drag_end)
+            w.Bind(wx.EVT_MOTION, self._drag_motion)
 
-    def _icon_btn(self, parent, text, cmd, hover_bg="#3b3b3b") -> tk.Button:
-        btn = tk.Button(
-            parent,
-            text=text,
-            fg=_FG_DIM,
-            bg=_BG,
-            activebackground=hover_bg,
-            activeforeground="#ffffff",
-            relief=tk.FLAT,
-            font=(_FONT_FAMILY, 10),
-            command=cmd,
-            cursor="hand2",
-            padx=4,
-            pady=0,
-            bd=0,
-        )
-        btn.bind("<Enter>", lambda e: btn.configure(fg="#ffffff"))
-        btn.bind("<Leave>", lambda e: btn.configure(fg=_FG_DIM))
+    def _make_btn(self, parent, label: str, handler: Callable) -> wx.Button:
+        btn = wx.Button(parent, label=label, style=wx.BORDER_NONE | wx.BU_EXACTFIT)
+        btn.SetBackgroundColour(_BG)
+        btn.SetForegroundColour(_FG_DIM)
+        btn.Bind(wx.EVT_BUTTON, lambda e: handler())
+        btn.Bind(wx.EVT_ENTER_WINDOW, lambda e: btn.SetForegroundColour(_FG))
+        btn.Bind(wx.EVT_LEAVE_WINDOW, lambda e: btn.SetForegroundColour(_FG_DIM))
         return btn
 
     # ── Positioning ───────────────────────────────────────────────────────────
 
     def _place_initial(self):
-        self._root.update_idletasks()
         if self._config.overlay_x >= 0 and self._config.overlay_y >= 0:
-            self._root.geometry(f"+{self._config.overlay_x}+{self._config.overlay_y}")
+            self.SetPosition((self._config.overlay_x, self._config.overlay_y))
         else:
-            sw = self._root.winfo_screenwidth()
-            sh = self._root.winfo_screenheight()
-            w = self._root.winfo_reqwidth()
-            self._root.geometry(f"+{sw - w - 20}+{sh - 80}")
+            display = wx.Display(0)
+            geom = display.GetGeometry()
+            w, h = self.GetSize()
+            x = geom.x + geom.width - w - 20
+            y = geom.y + geom.height - h - 80
+            self.SetPosition((x, y))
 
     def _drag_start(self, event):
-        self._drag_x = event.x_root - self._root.winfo_x()
-        self._drag_y = event.y_root - self._root.winfo_y()
+        screen_pos = event.GetEventObject().ClientToScreen(event.GetPosition())
+        win_pos = self.GetPosition()
+        self._drag_start_pos = (screen_pos.x - win_pos.x, screen_pos.y - win_pos.y)
 
     def _drag_motion(self, event):
-        x = event.x_root - self._drag_x
-        y = event.y_root - self._drag_y
+        if (
+            self._drag_start_pos is None
+            or not event.Dragging()
+            or not event.LeftIsDown()
+        ):
+            return
+        screen_pos = event.GetEventObject().ClientToScreen(event.GetPosition())
+        x = screen_pos.x - self._drag_start_pos[0]
+        y = screen_pos.y - self._drag_start_pos[1]
         # Snap to taskbar
-        sh = self._root.winfo_screenheight()
-        h = self._root.winfo_height()
+        display = wx.Display(0)
+        geom = display.GetGeometry()
+        sh = geom.y + geom.height
+        h = self.GetSize().height
         if abs((y + h) - sh) < 40:
             y = sh - h - 2
-        self._root.geometry(f"+{x}+{y}")
+        self.SetPosition((x, y))
 
     def _drag_end(self, event):
-        if self._on_move:
-            self._on_move(self._root.winfo_x(), self._root.winfo_y())
+        if self._drag_start_pos is not None:
+            self._drag_start_pos = None
+            if self._on_move:
+                pos = self.GetPosition()
+                self._on_move(pos.x, pos.y)
 
     # ── State ─────────────────────────────────────────────────────────────────
 
     def set_state(self, state: str):
         self._state = state
         color = _STATE_COLORS.get(state, _STATE_COLORS["idle"])
-        self._dot_cv.itemconfig(self._dot, fill=color)
-        self._status_lbl.configure(
-            text=state,
-            fg=color if state != "idle" else _FG_DIM,
-        )
-        self._bar_cv.configure(
-            highlightbackground=color if state == "recording" else "#444"
-        )
+        self._dot.set_color(color)
+        self._status_lbl.SetLabel(state)
+        self._status_lbl.SetForegroundColour(color if state != "idle" else _FG_DIM)
+        border_color = color if state == "recording" else wx.Colour(68, 68, 68)
+        self._level_bar.set_fill(self._level_bar._fill, border_color)
+        self._toolbar.Layout()
 
     def add_transcription(self, text: str):
         if not text:
             return
         self._history.append(text)
-        self._hist_text.configure(state=tk.NORMAL)
-        if len(self._history) > 1:
-            self._hist_text.insert(tk.END, "\n")
-        self._hist_text.insert(tk.END, f"→ {text}")
-        self._hist_text.see(tk.END)
-        self._hist_text.configure(state=tk.DISABLED)
+        existing = self._hist_text.GetValue()
+        if existing:
+            self._hist_text.AppendText(f"\n→ {text}")
+        else:
+            self._hist_text.AppendText(f"→ {text}")
         self.set_state("idle")
 
     def raise_to_front(self):
-        if self._config.overlay_raise_on_hotkey:
-            self._root.deiconify()
-            self._root.lift()
-            self._root.attributes("-topmost", True)
+        if not self._config.overlay_raise_on_hotkey:
+            return
+        self.Show()
+        self.Raise()
+        self.SetFocus()
+        if sys.platform not in ("win32", "darwin"):
+            # GTK focus-stealing prevention blocks Raise(); use xdotool on X11
+            import shutil
+            import subprocess
+
+            if shutil.which("xdotool"):
+                subprocess.Popen(
+                    ["xdotool", "windowactivate", str(self.GetHandle())],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
 
     def apply_topmost(self, value: bool):
         self._config.overlay_always_on_top = value
-        self._root.attributes("-topmost", value)
+        style = self.GetWindowStyleFlag()
+        if value:
+            style |= wx.STAY_ON_TOP
+        else:
+            style &= ~wx.STAY_ON_TOP
+        self.SetWindowStyleFlag(style)
 
-    # ── Level bar poll ────────────────────────────────────────────────────────
+    # ── Level bar poll (timer) ─────────────────────────────────────────────────
 
-    def _poll_level(self):
+    def _on_timer(self, event):
         if self._state == "recording":
             rms = self._get_rms()
-            filled = int(min(rms / 0.06, 1.0) * _BAR_W)
-            self._bar_cv.coords(self._bar_fill, 0, 0, filled, _BAR_H)
+            fraction = min(rms / 0.06, 1.0)
+            border_color = _STATE_COLORS["recording"]
+            self._level_bar.set_fill(fraction, border_color)
         else:
-            self._bar_cv.coords(self._bar_fill, 0, 0, 0, _BAR_H)
-        self._root.after(80, self._poll_level)
+            self._level_bar.set_fill(0.0, wx.Colour(68, 68, 68))
 
     # ── History toggle ────────────────────────────────────────────────────────
 
     def _toggle_history(self):
         if self._history_visible:
-            self._hist_frame.pack_forget()
-            self._hist_btn.configure(text="▼")
+            self._hist_panel.Hide()
+            self._hist_btn.SetLabel("▼")
         else:
-            self._hist_frame.pack(fill=tk.BOTH, expand=True)
-            self._hist_btn.configure(text="▲")
+            self._hist_panel.Show()
+            self._hist_btn.SetLabel("▲")
         self._history_visible = not self._history_visible
+        self.GetSizer().Fit(self)
+        self.Layout()
 
-    # ── Hide / show ───────────────────────────────────────────────────────────
+    # ── Misc ──────────────────────────────────────────────────────────────────
 
     def recenter(self):
-        self._root.update_idletasks()
-        sw = self._root.winfo_screenwidth()
-        sh = self._root.winfo_screenheight()
-        w = self._root.winfo_width()
-        h = self._root.winfo_height()
-        x = (sw - w) // 2
-        y = (sh - h) // 2
-        self._root.geometry(f"+{x}+{y}")
+        display = wx.Display(0)
+        geom = display.GetGeometry()
+        w, h = self.GetSize()
+        x = geom.x + (geom.width - w) // 2
+        y = geom.y + (geom.height - h) // 2
+        self.SetPosition((x, y))
         if self._on_move:
             self._on_move(x, y)
-
-    def _hide(self):
-        self._root.withdraw()
-
-    def show(self):
-        self._root.deiconify()
-        self._root.lift()

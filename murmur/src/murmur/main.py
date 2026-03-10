@@ -146,20 +146,23 @@ def main():
     _is_recording = threading.Event()
     _shutdown = threading.Event()
     _overlay = None  # OverlayWindow | None
-    _root = None  # tk.Tk | None
     _wakeword_listener = None  # WakeWordListener | None
 
     # ── Thread-safe helpers ───────────────────────────────────────────────────
 
     def _set_state(state: str):
+        import wx
+
         tray.set_state(state)
-        if _root is not None and _overlay is not None:
-            _root.after(0, lambda s=state: _overlay.set_state(s))
+        if _overlay is not None:
+            wx.CallAfter(_overlay.set_state, state)
 
     def _push_transcription(text: str):
+        import wx
+
         tray.set_state("idle")
-        if _root is not None and _overlay is not None:
-            _root.after(0, lambda t=text: _overlay.add_transcription(t))
+        if _overlay is not None:
+            wx.CallAfter(_overlay.add_transcription, text)
 
     # ── IPC handler ───────────────────────────────────────────────────────────
 
@@ -205,8 +208,10 @@ def main():
             return
         _is_recording.set()
         _set_state("recording")
-        if _overlay is not None and _root is not None:
-            _root.after(0, _overlay.raise_to_front)
+        if _overlay is not None:
+            import wx
+
+            wx.CallAfter(_overlay.raise_to_front)
         recorder.start_recording()
         stop = threading.Event()
         _anim["stop"] = stop
@@ -325,12 +330,12 @@ def main():
 
     if config.overlay:
         try:
-            import tkinter as tk
+            import wx
 
             from .overlay import OverlayWindow
             from .settings_dialog import SettingsDialog
 
-            _root = tk.Tk()
+            app = wx.App(False)
 
             def _apply_settings(**kw):
                 nonlocal hotkey_listener, _wakeword_listener
@@ -400,23 +405,26 @@ def main():
 
             def _open_settings():
                 nonlocal _settings_dialog
-                if _settings_dialog is not None and _settings_dialog.winfo_exists():
-                    _settings_dialog.lift()
-                    _settings_dialog.focus_force()
-                    return
+                if _settings_dialog is not None:
+                    try:
+                        _settings_dialog.Raise()
+                        _settings_dialog.SetFocus()
+                        return
+                    except RuntimeError:
+                        pass
                 _settings_dialog = SettingsDialog(
-                    _root,
+                    _overlay,
                     config,
                     config_path,
                     _apply_settings,
                     on_recenter=_overlay.recenter,
                 )
+                _settings_dialog.Show()
 
             # Let the tray open the dialog instead of the raw TOML file
-            tray._on_settings = lambda: _root.after(0, _open_settings)
+            tray._on_settings = lambda: wx.CallAfter(_open_settings)
 
             _overlay = OverlayWindow(
-                _root,
                 config,
                 on_settings=_open_settings,
                 on_quit=_shutdown.set,
@@ -424,18 +432,18 @@ def main():
                 on_move=_save_position,
             )
 
-            # Route signals through tkinter thread to avoid race conditions
-            signal.signal(signal.SIGINT, lambda *_: _root.after(0, _shutdown.set))
-            signal.signal(signal.SIGTERM, lambda *_: _root.after(0, _shutdown.set))
+            # Route signals through wx main loop
+            signal.signal(signal.SIGINT, lambda *_: wx.CallAfter(_shutdown.set))
+            signal.signal(signal.SIGTERM, lambda *_: wx.CallAfter(_shutdown.set))
 
             def _check_shutdown():
                 if _shutdown.is_set():
-                    _root.quit()
+                    app.ExitMainLoop()
                 else:
-                    _root.after(100, _check_shutdown)
+                    wx.CallLater(100, _check_shutdown)
 
-            _root.after(100, _check_shutdown)
-            _root.mainloop()
+            wx.CallLater(100, _check_shutdown)
+            app.MainLoop()
 
         except Exception as e:
             print(f"  overlay unavailable ({e}), running headless")
