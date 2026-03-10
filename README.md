@@ -1,224 +1,228 @@
 # Murmur
 
-> Push-to-talk voice-to-text for developers — local, fast, no cloud.
+> Hold a key, speak, release — transcribed text appears wherever your cursor is.
 
-Hold a hotkey, speak, release. The transcribed text is injected directly into whatever window is active. Everything runs locally via [faster-whisper](https://github.com/SYSTRAN/faster-whisper); nothing leaves your machine.
+Murmur is a push-to-talk voice transcription tool. Press and hold a hotkey (default **F9**), say something, release — the text is typed into whatever window is active. Everything runs locally on your machine using [faster-whisper](https://github.com/SYSTRAN/faster-whisper). No internet connection, no account, no data sent anywhere.
 
-An optional companion MCP server lets Claude Code (and any MCP-compatible client) trigger recordings on demand via the `listen()` tool.
-
----
-
-## Features
-
-- **Push-to-talk** — hold F9 (configurable), speak, release
-- **Fully local** — faster-whisper runs on CPU or CUDA; no API keys, no internet
-- **Cross-platform** — Linux (X11 + Wayland) and Windows
-- **Wake word** — optional always-on detection via openwakeword (`murmur --install-wakeword`)
-- **GUI overlay** — floating recording indicator (tkinter, optional via config)
-- **System tray** — tray icon with status and quit option (optional via config)
-- **Live audio meter** — visual feedback in the terminal while recording
-- **MCP integration** — expose `listen()` and `status()` tools to Claude Code
-- **Configurable** — model size, language, hotkey, device, compute type, inject delay
+Works on **Linux** and **Windows**.
 
 ---
 
-## How it works
-
-```
-F9 press  →  microphone opens
-F9 hold   →  audio buffered  →  live level bar in terminal
-F9 release →  faster-whisper transcribes  →  text injected into active window
-```
-
-IPC path (used by the MCP server):
-
-```
-{"cmd": "listen"}  →  records until silence  →  {"text": "..."}
-{"cmd": "status"}  →  {"running": true}
-```
-
----
-
-## Requirements
+## Install
 
 ### Linux
-
-| Display server | Package needed |
-|----------------|----------------|
-| X11            | `xdotool`      |
-| Wayland        | `ydotool`      |
-
-```bash
-# Debian / Ubuntu
-sudo apt install xdotool      # X11
-sudo apt install ydotool      # Wayland
-```
-
-### Windows
-
-No extra tools needed. Text is injected via the clipboard (Ctrl+V).
-
-### CUDA (optional)
-
-Murmur auto-detects CUDA at startup. To force a specific device, set `device = "cuda"` or `device = "cpu"` in your config file.
-
-### Source / pip install only
-
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/getting-started/installation/)
-
----
-
-## Wake word (optional)
-
-Murmur supports always-on wake word detection via [openwakeword](https://github.com/dscripka/openWakeWord). Because it adds ~200 MB of ML dependencies, it is not bundled in the binary — install it on demand with one command:
-
-```bash
-murmur --install-wakeword
-```
-
-Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) to be installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`). This downloads `openwakeword` into a user-local directory and leaves the main binary untouched. Restart Murmur afterwards.
-
-Then set `wake_word` in your config (see [Configuration](#configuration) below).
-
-Available built-in model names: `hey_jarvis`, `alexa`, `hey_mycroft`, `hey_rhasspy`, and others — see the [openwakeword model list](https://github.com/dscripka/openWakeWord#pre-trained-models). Custom `.onnx` / `.tflite` model files are also supported (use the file path as the value).
-
-**Install location:**
-
-| Platform | Directory |
-|----------|-----------|
-| Linux    | `~/.local/share/murmur/wakeword` |
-| macOS    | `~/Library/Application Support/murmur/wakeword` |
-| Windows  | `%LOCALAPPDATA%\murmur\wakeword` |
-
----
-
-## Installation
-
-### Linux / macOS — one-liner (binary, no Python needed)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/24R0qu3/Murmur/main/install.sh | bash
 ```
 
-Installs the self-contained binary to `~/.local/bin`. Override the location:
+Installs a self-contained binary to `~/.local/bin`. No Python or other dependencies needed.
+
+> If `~/.local/bin` is not in your PATH, the installer will tell you the exact command to add it.
+
+**One extra step on Linux** — Murmur needs a tool to type text into other apps. Install the one that matches your desktop:
 
 ```bash
-INSTALL_DIR=/usr/local/bin bash <(curl -fsSL https://raw.githubusercontent.com/24R0qu3/Murmur/main/install.sh)
+# If you use X11 (most common — e.g. Ubuntu with GNOME, KDE on Xorg):
+sudo apt install xdotool
+
+# If you use Wayland (e.g. Ubuntu 22.04+ default, GNOME on Wayland):
+sudo apt install ydotool
 ```
 
-### Windows — one-liner (binary, no Python needed)
+Not sure which one you have? Run `echo $XDG_SESSION_TYPE` — it will say `x11` or `wayland`.
+
+### Windows
+
+Open **PowerShell** and run:
 
 ```powershell
 irm https://raw.githubusercontent.com/24R0qu3/Murmur/main/install.ps1 | iex
 ```
 
-Installs to `%LOCALAPPDATA%\Programs\murmur` and adds it to the user PATH automatically.
-
-### From source (Python required)
-
-```bash
-git clone https://github.com/24R0qu3/Murmur.git
-cd Murmur/murmur
-uv run murmur
-```
-
-### From GitHub (pip / uv)
-
-```bash
-# uv
-uv tool install "murmur @ git+https://github.com/24R0qu3/Murmur.git#subdirectory=murmur"
-
-# pip
-pip install "murmur @ git+https://github.com/24R0qu3/Murmur.git#subdirectory=murmur"
-```
+Installs to `%LOCALAPPDATA%\Programs\murmur` and adds it to your PATH automatically.
 
 ---
 
-On first run the Whisper model is downloaded automatically (≈150 MB for `base`). Subsequent starts are fast.
+## First run
 
-Expected output:
+After installing, open a terminal and run:
+
+```
+murmur
+```
+
+The first time, it downloads the Whisper speech model (~150 MB). This takes a minute. After that it starts instantly.
+
+You'll see something like:
 
 ```
 Loading model...
 Ready.
 
   F9      hold to record, release to transcribe + inject
-  language  de
+  language  en
   model     base
-  device    cuda  (auto-detected)
-  compute   int8_float32
+  device    cpu
   Ctrl+C  exit
+```
+
+A small floating toolbar also appears on your screen. That's the overlay — it shows recording status and a history of your transcriptions.
+
+**You're ready.** Switch to any app (text editor, browser, chat), hold **F9**, speak, release. The text appears.
+
+---
+
+## Settings
+
+Click the **⚙** button on the overlay toolbar to open the settings panel. From there you can change:
+
+- **Hotkey** — the key you hold to record
+- **Language** — what language you're speaking (leave blank for auto-detect)
+- **Model** — larger models are more accurate but slower (see table below)
+- **Wake word** — say a phrase to start recording hands-free
+- **Overlay** options — always-on-top, position
+
+Changes to the hotkey, language, and wake word take effect immediately. Model changes require a restart.
+
+### Choosing a model
+
+| Model | Download size | Speed | Accuracy |
+|-------|--------------|-------|----------|
+| `tiny` | ~75 MB | Fastest | Lower |
+| `base` | ~150 MB | Fast | Good — **default** |
+| `small` | ~480 MB | Moderate | Better |
+| `medium` | ~1.5 GB | Slow | High |
+| `large-v3` | ~3 GB | Slowest | Best — needs a GPU |
+
+For most people, `base` is the sweet spot. If you have a GPU, `large-v3` is noticeably better.
+
+### Config file
+
+Settings are saved to **`~/.config/murmur/config.toml`** (Linux) or **`%APPDATA%\murmur\config.toml`** (Windows). You can also edit it directly:
+
+```toml
+model           = "base"
+language        = "en"    # leave "" to auto-detect the spoken language
+hotkey          = "F9"
+inject_delay_ms = 0       # increase (e.g. 50) if text gets cut off in some apps
 ```
 
 ---
 
-## Configuration
+## Wake word (optional)
 
-Config file location: **`~/.config/murmur/config.toml`**
+Wake word lets you start recording by saying a phrase — no key press needed. Because the required ML library is large (~200 MB extra), it's not included by default. Install it with:
 
-Create the file if it doesn't exist. All fields are optional — omitted fields use the defaults shown below.
-
-```toml
-model           = "base"   # Whisper model size (see table below)
-language        = "de"     # ISO 639-1 code, or "" to auto-detect
-hotkey          = "F9"     # Any key name recognised by pynput
-device          = "auto"   # "auto", "cpu", or "cuda"
-compute_type    = "auto"   # "auto", "int8", "int8_float32", "float16", "float32"
-inject_delay_ms = 0        # ms to wait before injecting (helps some apps)
-
-# GUI
-tray                   = true   # system tray icon
-overlay                = true   # floating recording indicator
-overlay_always_on_top  = true
-overlay_raise_on_hotkey = true
-overlay_x              = -1     # position in pixels; -1 = auto (bottom-right)
-overlay_y              = -1
-
-# Wake word (requires murmur --install-wakeword)
-wake_word           = ""    # e.g. "hey_jarvis" — leave empty to disable
-wake_word_threshold = 0.5   # 0.0–1.0, higher = fewer false positives
+```bash
+murmur --install-wakeword
 ```
 
-### Model sizes
+This requires [uv](https://docs.astral.sh/uv/getting-started/installation/) to be installed first:
 
-| Model    | Size   | Speed (CPU) | Notes                        |
-|----------|--------|-------------|------------------------------|
-| `tiny`   | ~75 MB | fastest     | Lower accuracy               |
-| `base`   | ~150 MB| fast        | Good balance — **default**   |
-| `small`  | ~480 MB| moderate    |                              |
-| `medium` | ~1.5 GB| slow        | High accuracy                |
-| `large-v3`| ~3 GB | slowest     | Best accuracy, needs GPU     |
+```bash
+# Linux / macOS
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-### Language codes
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
-Set `language = ""` to let Whisper auto-detect the spoken language (adds ~0.5 s). Otherwise use an [ISO 639-1 code](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes): `"en"`, `"de"`, `"fr"`, `"es"`, `"ja"`, etc.
+After installing, restart Murmur and set the wake word in Settings (or in your config file):
+
+```toml
+wake_word = "hey_jarvis"
+```
+
+Available built-in phrases: `hey_jarvis`, `alexa`, `hey_mycroft`, `hey_rhasspy`. Custom model files (`.onnx`) are also supported — use the file path as the value. Built-in models are English only.
+
+---
+
+## GPU acceleration (optional)
+
+Murmur auto-detects CUDA at startup. If you have an NVIDIA GPU and want to use it:
+
+```bash
+murmur --install-cuda
+```
+
+This downloads the required CUDA runtime libraries (~500 MB) without touching your system installation. Restart Murmur after installing — it will detect your GPU automatically.
+
+To force a specific device, add to your config:
+
+```toml
+device = "cuda"   # or "cpu"
+```
+
+---
+
+## Uninstall
+
+Remove all data Murmur has stored (models, wake word files, config, logs):
+
+```bash
+murmur --uninstall
+```
+
+Then remove the binary itself:
+
+```bash
+# Linux
+rm ~/.local/bin/murmur
+
+# Windows (PowerShell)
+Remove-Item "$env:LOCALAPPDATA\Programs\murmur" -Recurse -Force
+```
+
+---
+
+## Troubleshooting
+
+**Text isn't appearing when I release the key (Linux)**
+
+- Make sure `xdotool` (X11) or `ydotool` (Wayland) is installed — see [Install](#install) above.
+- On Wayland with `ydotool`, you may need to add your user to the `input` group: `sudo usermod -aG input $USER` and then log out/in.
+
+**Nothing is recognised after transcribing**
+
+- Check that the right language is set. If unsure, try `language = ""` for auto-detect.
+- Make sure your microphone is working — if the level bar in the terminal stays flat while you speak, the wrong input device is selected.
+- Try a larger model (`small` or `medium`).
+
+**Murmur is slow to transcribe**
+
+- You're likely on CPU with a large model. Switch to `base` or `tiny`, or install CUDA support if you have an NVIDIA GPU.
+
+**First startup takes forever**
+
+- It's downloading the Whisper model from Hugging Face. This only happens once.
+
+**Audio device error on Windows**
+
+- Make sure your microphone is set as the default recording device in Windows Sound Settings.
+
+**Wake word isn't triggering**
+
+- Run `murmur --install-wakeword` if you see "openwakeword is not installed".
+- Lower `wake_word_threshold` in your config if it misses triggers (default 0.5). Raise it to reduce false positives.
 
 ---
 
 ## MCP server — Claude Code integration
 
-The `murmur-mcp` package is a thin MCP server that connects to the running Murmur daemon and exposes two tools:
+Murmur ships a companion MCP server that lets Claude Code (and any MCP client) trigger recordings on demand via a `listen()` tool. The daemon must be running for this to work.
 
-| Tool | Description |
-|------|-------------|
-| `listen()` | Starts recording; returns transcribed text when silence is detected |
-| `status()` | Returns `{"running": true}` if the daemon is reachable |
-
-### Start the daemon first
+### Setup
 
 ```bash
-cd murmur
-uv run murmur
-```
+# Start the daemon
+murmur
 
-### Add to Claude Code (recommended)
-
-```bash
+# Add to Claude Code
 claude mcp add murmur -- uv --directory /path/to/Murmur/murmur-mcp run murmur-mcp
 ```
 
-Replace `/path/to/Murmur` with the absolute path to your clone.
+Replace `/path/to/Murmur` with the path to your clone.
 
 ### Claude Desktop (`claude_desktop_config.json`)
 
@@ -227,58 +231,39 @@ Replace `/path/to/Murmur` with the absolute path to your clone.
   "mcpServers": {
     "murmur": {
       "command": "uv",
-      "args": [
-        "--directory",
-        "/path/to/Murmur/murmur-mcp",
-        "run",
-        "murmur-mcp"
-      ]
+      "args": ["--directory", "/path/to/Murmur/murmur-mcp", "run", "murmur-mcp"]
     }
   }
 }
 ```
 
-The MCP server will print a clear error if the daemon is not running:
+### Available tools
 
-```
-ConnectionError: Murmur daemon is not running. Start it with: uv run murmur
-```
-
----
-
-## Repository structure
-
-```
-Murmur/
-├── install.sh               # One-liner installer (Linux / macOS)
-├── install.ps1              # One-liner installer (Windows)
-├── murmur/                  # Daemon package
-│   ├── pyproject.toml
-│   ├── murmur.spec          # PyInstaller spec
-│   └── src/murmur/
-│       ├── main.py          # Entry point — wires everything together
-│       ├── config.py        # Config loading (~/.config/murmur/config.toml)
-│       ├── audio.py         # Microphone capture (sounddevice + auto device detection)
-│       ├── transcribe.py    # faster-whisper wrapper
-│       ├── inject.py        # Text injection (xdotool / ydotool / clipboard+Ctrl+V)
-│       ├── hotkey.py              # Global hotkey listener (pynput)
-│       ├── ipc.py                 # JSON-over-socket server (Unix socket / Named Pipe)
-│       ├── wakeword.py            # Wake word detection (openwakeword)
-│       ├── wakeword_installer.py  # In-app openwakeword installer
-│       └── log.py                 # Rotating file logger
-└── murmur-mcp/              # MCP server package
-    ├── pyproject.toml
-    └── src/murmur_mcp/
-        ├── main.py          # FastMCP entry point
-        ├── ipc_client.py    # IPC client (connects to the daemon)
-        └── log.py           # Rotating file logger
-```
+| Tool | What it does |
+|------|-------------|
+| `listen()` | Records until silence, returns the transcribed text |
+| `listen_semi()` | Like `listen()` but with a countdown |
+| `converse()` | Multi-turn voice interaction |
+| `stop_listening()` | Aborts an active recording |
+| `status()` | Returns `{"running": true}` if the daemon is reachable |
 
 ---
 
-## IPC protocol
+## For developers
 
-The daemon listens on:
+### Build from source
+
+```bash
+git clone https://github.com/24R0qu3/Murmur.git
+cd Murmur/murmur
+uv run murmur
+```
+
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+### IPC protocol
+
+The daemon listens on a local socket:
 - **Linux**: Unix socket at `/tmp/murmur.sock`
 - **Windows**: Named Pipe at `\\.\pipe\murmur`
 
@@ -289,51 +274,44 @@ Messages are newline-terminated JSON:
 → {"cmd": "status"}
 ← {"running": true}
 
-// Record until silence and transcribe
-→ {"cmd": "listen"}
+// Record until silence
+→ {"cmd": "listen", "timeout": 30, "silence_duration": 1.5}
 ← {"text": "your transcribed words"}
-
-// Error response
-← {"error": "Unknown command: 'foo'"}
 ```
 
 Test on Linux:
-
 ```bash
 echo '{"cmd": "status"}' | nc -U /tmp/murmur.sock
-echo '{"cmd": "listen"}' | nc -U /tmp/murmur.sock
 ```
 
----
+### Repository structure
 
-## Troubleshooting
-
-### Audio device not opening (Windows)
-
-Murmur automatically probes WASAPI and common sample rates at startup and uses the first combination that works. If no device is found, check that your microphone is set as the default recording device in Windows Sound Settings.
-
-### Text not injected (Linux / X11)
-
-Make sure `xdotool` is installed and `$DISPLAY` is set. Some Wayland compositors require `ydotool` and elevated permissions — see the ydotool documentation.
-
-### Model download fails
-
-Faster-whisper downloads models from Hugging Face on first use. If you're offline or behind a proxy, download the model manually and point `model` to the local path in your config.
-
-### Wake word not triggering
-
-- Run `murmur --install-wakeword` if you see "openwakeword is not installed"
-- Raise `wake_word_threshold` to reduce false positives, lower it if it misses detections
-- Built-in models are English-only; use a custom model file for other languages
-
-### Nothing recognised
-
-- Ensure the correct language is set (or use `language = ""` for auto-detect)
-- Try a larger model (`small` or `medium`)
-- Check microphone input levels — if the live bar in the terminal shows no activity, the wrong input device may be selected
+```
+Murmur/
+├── install.sh / install.ps1     # One-liner installers
+├── murmur/                      # Daemon package (uv + setuptools)
+│   ├── murmur.spec              # PyInstaller build spec
+│   └── src/murmur/
+│       ├── main.py              # Entry point — wires everything together
+│       ├── config.py            # Config loading
+│       ├── audio.py             # Microphone capture (sounddevice)
+│       ├── transcribe.py        # faster-whisper wrapper
+│       ├── inject.py            # Text injection (xdotool / ydotool / clipboard)
+│       ├── hotkey.py            # Global hotkey (pynput)
+│       ├── ipc.py               # JSON-over-socket server
+│       ├── overlay.py           # Floating tkinter toolbar
+│       ├── tray.py              # System tray icon (pystray)
+│       ├── settings_dialog.py   # Settings UI
+│       ├── wakeword.py          # Wake word detection (openwakeword)
+│       └── wakeword_installer.py
+└── murmur-mcp/                  # MCP server package
+    └── src/murmur_mcp/
+        ├── main.py              # FastMCP server
+        └── ipc_client.py        # Connects to the daemon socket
+```
 
 ---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
