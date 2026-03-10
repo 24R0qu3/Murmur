@@ -59,7 +59,8 @@ jobs:
         working-directory: murmur
         run: |
           uv pip install \
-            -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 \
+            --find-links https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 \
+            --no-build \
             wxPython
 
       - name: Install dependencies
