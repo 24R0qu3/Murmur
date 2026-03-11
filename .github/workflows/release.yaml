@@ -74,7 +74,7 @@ jobs:
       # ── Build ───────────────────────────────────────────────────────────────
       - name: Build executable
         working-directory: murmur
-        run: uv run pyinstaller murmur.spec --noconfirm
+        run: uv run --no-sync pyinstaller murmur.spec --noconfirm
 
       # ── Package ─────────────────────────────────────────────────────────────
       - name: Rename artifact (Windows)
