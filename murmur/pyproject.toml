@@ -53,6 +53,7 @@ replace = '__version__ = "{new_version}"'
 name = "wxpython-extras"
 url = "https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04"
 format = "flat"
+marker = "sys_platform == 'linux'"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
