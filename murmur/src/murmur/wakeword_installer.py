@@ -104,8 +104,37 @@ def install_wakeword() -> int:
         return result.returncode
 
     print(f"  Installing {_PACKAGE} …")
+    # Install openwakeword without tflite-runtime: it has no Python 3.12+ wheels,
+    # and murmur uses onnxruntime exclusively (see wakeword.py).
     result = subprocess.run(
-        [uv, "pip", "install", "--python", str(venv_dir), _PACKAGE, "--upgrade"]
+        [
+            uv,
+            "pip",
+            "install",
+            "--python",
+            str(venv_dir),
+            "--no-deps",
+            _PACKAGE,
+            "--upgrade",
+        ]
+    )
+    if result.returncode != 0:
+        return result.returncode
+    result = subprocess.run(
+        [
+            uv,
+            "pip",
+            "install",
+            "--python",
+            str(venv_dir),
+            "onnxruntime",
+            "numpy",
+            "scipy",
+            "scikit-learn",
+            "tqdm",
+            "packaging",
+            "--upgrade",
+        ]
     )
     if result.returncode != 0:
         return result.returncode
