@@ -259,7 +259,10 @@ class OverlayWindow(wx.Frame):
         if not self._config.overlay_raise_on_hotkey:
             return
         self.Show()
-        self.Raise()
+        # Do NOT call Raise() — on GTK it maps to gtk_window_present() which
+        # steals keyboard focus from the active window, breaking text injection.
+        # STAY_ON_TOP keeps the overlay visible; xdotool windowraise adjusts
+        # Z-order only, without changing focus.
         if sys.platform not in ("win32", "darwin"):
             # GTK ignores Raise() from non-focused apps; use xdotool windowraise.
             # windowactivate is avoided — it triggers synthetic clicks on

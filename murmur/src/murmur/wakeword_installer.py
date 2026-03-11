@@ -133,6 +133,7 @@ def install_wakeword() -> int:
             "scikit-learn",
             "tqdm",
             "packaging",
+            "requests",
             "--upgrade",
         ]
     )
