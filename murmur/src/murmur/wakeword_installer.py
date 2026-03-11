@@ -15,7 +15,7 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
-_PACKAGE = "openwakeword"
+_PACKAGE = "openwakeword>=0.6.0"
 _PY_VER = f"{sys.version_info.major}.{sys.version_info.minor}"
 
 _UV_INSTALL_HINT = (
