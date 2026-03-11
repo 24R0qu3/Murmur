@@ -46,6 +46,14 @@ filename = "src/murmur/__init__.py"
 search = '__version__ = "{current_version}"'
 replace = '__version__ = "{new_version}"'
 
+# wxPython wheels for Linux are not on PyPI — hosted on the official extras server.
+# uv uses this as an additional flat index; on Windows/macOS it finds nothing here
+# and falls back to PyPI automatically.
+[[tool.uv.index]]
+name = "wxpython-extras"
+url = "https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04"
+format = "flat"
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 
