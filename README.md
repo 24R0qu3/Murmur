@@ -210,19 +210,14 @@ Remove-Item "$env:LOCALAPPDATA\Programs\murmur" -Recurse -Force
 
 ## MCP server — Claude Code integration
 
-Murmur ships a companion MCP server that lets Claude Code (and any MCP client) trigger recordings on demand via a `listen()` tool. The daemon must be running for this to work.
+Murmur includes an MCP server that lets Claude Code (and any MCP client) trigger recordings on demand via a `listen()` tool. The daemon starts automatically in the background — no separate setup step needed.
 
 ### Setup
 
 ```bash
-# Start the daemon
-murmur
-
 # Add to Claude Code
-claude mcp add murmur -- uv --directory /path/to/Murmur/murmur-mcp run murmur-mcp
+claude mcp add murmur -- murmur --mcp
 ```
-
-Replace `/path/to/Murmur` with the path to your clone.
 
 ### Claude Desktop (`claude_desktop_config.json`)
 
@@ -230,8 +225,8 @@ Replace `/path/to/Murmur` with the path to your clone.
 {
   "mcpServers": {
     "murmur": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/Murmur/murmur-mcp", "run", "murmur-mcp"]
+      "command": "murmur",
+      "args": ["--mcp"]
     }
   }
 }
@@ -289,25 +284,25 @@ echo '{"cmd": "status"}' | nc -U /tmp/murmur.sock
 ```
 Murmur/
 ├── install.sh / install.ps1     # One-liner installers
-├── murmur/                      # Daemon package (uv + setuptools)
-│   ├── murmur.spec              # PyInstaller build spec
-│   └── src/murmur/
-│       ├── main.py              # Entry point — wires everything together
-│       ├── config.py            # Config loading
-│       ├── audio.py             # Microphone capture (sounddevice)
-│       ├── transcribe.py        # faster-whisper wrapper
-│       ├── inject.py            # Text injection (xdotool / ydotool / clipboard)
-│       ├── hotkey.py            # Global hotkey (pynput)
-│       ├── ipc.py               # JSON-over-socket server
-│       ├── overlay.py           # Floating overlay toolbar (wxPython)
-│       ├── tray.py              # System tray icon (pystray)
-│       ├── settings_dialog.py   # Settings UI
-│       ├── wakeword.py          # Wake word detection (openwakeword)
-│       └── wakeword_installer.py
-└── murmur-mcp/                  # MCP server package
-    └── src/murmur_mcp/
-        ├── main.py              # FastMCP server
-        └── ipc_client.py        # Connects to the daemon socket
+└── murmur/                      # Single package (uv + setuptools)
+    ├── murmur.spec              # PyInstaller build spec
+    └── src/
+        ├── murmur/
+        │   ├── main.py              # Entry point — wires everything together
+        │   ├── config.py            # Config loading
+        │   ├── audio.py             # Microphone capture (sounddevice)
+        │   ├── transcribe.py        # faster-whisper wrapper
+        │   ├── inject.py            # Text injection (xdotool / ydotool / clipboard)
+        │   ├── hotkey.py            # Global hotkey (pynput)
+        │   ├── ipc.py               # JSON-over-socket server
+        │   ├── overlay.py           # Floating overlay toolbar (wxPython)
+        │   ├── tray.py              # System tray icon (pystray)
+        │   ├── settings_dialog.py   # Settings UI
+        │   ├── wakeword.py          # Wake word detection (openwakeword)
+        │   └── wakeword_installer.py
+        └── murmur_mcp/
+            ├── main.py              # FastMCP server (run via: murmur --mcp)
+            └── ipc_client.py        # Connects to the daemon socket
 ```
 
 ---

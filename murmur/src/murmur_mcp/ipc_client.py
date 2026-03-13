@@ -4,7 +4,7 @@ import sys
 
 SOCKET_PATH = "/tmp/murmur.sock"
 PIPE_NAME = r"\\.\pipe\murmur"
-_ERROR_MSG = "Murmur daemon is not running. Start it with: uv run murmur"
+_ERROR_MSG = "Murmur daemon is not running. Start it with: murmur"
 
 
 class IPCClient:

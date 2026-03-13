@@ -81,7 +81,66 @@ def _uninstall() -> int:
     return 0
 
 
+def _start_mcp_mode():
+    import socket as _socket
+    import subprocess
+    import time
+
+    if sys.platform == "win32":
+        def _daemon_running() -> bool:
+            try:
+                import win32file
+
+                handle = win32file.CreateFile(
+                    r"\\.\pipe\murmur",
+                    win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+                    0, None, win32file.OPEN_EXISTING, 0, None,
+                )
+                win32file.CloseHandle(handle)
+                return True
+            except Exception:
+                return False
+    else:
+        def _daemon_running() -> bool:
+            try:
+                with _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM) as s:
+                    s.settimeout(1)
+                    s.connect("/tmp/murmur.sock")
+                    return True
+            except OSError:
+                return False
+
+    if not _daemon_running():
+        print("Starting Murmur daemon in background…", flush=True)
+        subprocess.Popen(
+            [sys.argv[0]],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        for _ in range(30):
+            time.sleep(0.5)
+            if _daemon_running():
+                break
+        else:
+            print("ERROR: Murmur daemon did not start in time.", file=sys.stderr)
+            sys.exit(1)
+
+    from murmur_mcp.main import main as mcp_main
+
+    mcp_main()
+
+
 def main():
+    import os as _os
+
+    # Suppress noisy GTK system warnings that are harmless but confusing to users.
+    # These come from system plugins (IBus, gvfs, xapp) with GLib version mismatches.
+    _os.environ.setdefault("GTK_MODULES", "")           # skip xapp-gtk3-module etc.
+    _os.environ.setdefault("GTK_IM_MODULE", "gtk-im-context-simple")  # skip IBus IM
+    _os.environ.setdefault("GIO_USE_VFS", "local")      # skip gvfs/dbus VFS plugin
+    _os.environ.setdefault("NO_AT_BRIDGE", "1")         # skip atk-bridge accessibility
+
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--log", default="WARNING", choices=LEVELS)
     parser.add_argument("--log-file", default="DEBUG", choices=LEVELS)
@@ -101,6 +160,11 @@ def main():
         action="store_true",
         help="Remove all murmur data (wakeword, cuda, logs) and exit.",
     )
+    parser.add_argument(
+        "--mcp",
+        action="store_true",
+        help="Start the MCP server (auto-starts the daemon in background if not running).",
+    )
     args, _ = parser.parse_known_args()
 
     # Install wake word support and exit if requested
@@ -112,6 +176,10 @@ def main():
 
     if args.uninstall:
         raise SystemExit(_uninstall())
+
+    if args.mcp:
+        _start_mcp_mode()
+        return
 
     # Inject side-installed wakeword path before any imports that need it
     inject_wakeword_path()
