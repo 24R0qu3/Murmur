@@ -97,10 +97,22 @@ async def configure(setting: str, value: str) -> dict:
 
 
 _LANG_NAMES = {
-    "": "Auto-detect", "en": "English", "de": "German", "fr": "French",
-    "es": "Spanish", "it": "Italian", "pt": "Portuguese", "nl": "Dutch",
-    "pl": "Polish", "ru": "Russian", "zh": "Chinese", "ja": "Japanese",
-    "ko": "Korean", "ar": "Arabic", "tr": "Turkish", "sv": "Swedish",
+    "": "Auto-detect",
+    "en": "English",
+    "de": "German",
+    "fr": "French",
+    "es": "Spanish",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "ru": "Russian",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "ar": "Arabic",
+    "tr": "Turkish",
+    "sv": "Swedish",
 }
 _MODEL_INFO = {
     "tiny": "tiny — fastest, lower accuracy (~75 MB)",
@@ -126,7 +138,11 @@ def murmur_settings() -> str:
     model = cfg.get("model", "base")
     model_label = _MODEL_INFO.get(model, model)
     device = cfg.get("device", "auto")
-    device_label = {"auto": "Auto (use GPU if available)", "cpu": "CPU only", "cuda": "GPU (CUDA)"}.get(device, device)
+    device_label = {
+        "auto": "Auto (use GPU if available)",
+        "cpu": "CPU only",
+        "cuda": "GPU (CUDA)",
+    }.get(device, device)
     hotkey = cfg.get("hotkey", "F9")
     wake_word = cfg.get("wake_word") or ""
     wake_label = wake_word if wake_word else "Disabled"
@@ -142,10 +158,12 @@ def murmur_settings() -> str:
         "",
         "**Input**",
         f"  • Hotkey:    Hold **{hotkey}** to record",
-        f"  • Wake word: {wake_label}" + (f"  (sensitivity {threshold})" if wake_word else ""),
+        f"  • Wake word: {wake_label}"
+        + (f"  (sensitivity {threshold})" if wake_word else ""),
         "",
         "**Output**",
-        f"  • Inject delay: {delay} ms" + ("  (increase if text gets cut off)" if delay == 0 else ""),
+        f"  • Inject delay: {delay} ms"
+        + ("  (increase if text gets cut off)" if delay == 0 else ""),
         "",
         "Display the above settings to the user clearly.",
         "Then ask what they'd like to change and apply it with `configure()`.",

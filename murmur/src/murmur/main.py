@@ -87,6 +87,7 @@ def _start_mcp_mode():
     import time
 
     if sys.platform == "win32":
+
         def _daemon_running() -> bool:
             try:
                 import win32file
@@ -94,13 +95,18 @@ def _start_mcp_mode():
                 handle = win32file.CreateFile(
                     r"\\.\pipe\murmur",
                     win32file.GENERIC_READ | win32file.GENERIC_WRITE,
-                    0, None, win32file.OPEN_EXISTING, 0, None,
+                    0,
+                    None,
+                    win32file.OPEN_EXISTING,
+                    0,
+                    None,
                 )
                 win32file.CloseHandle(handle)
                 return True
             except Exception:
                 return False
     else:
+
         def _daemon_running() -> bool:
             try:
                 with _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM) as s:
@@ -137,10 +143,10 @@ def main():
 
     # Suppress noisy GTK system warnings that are harmless but confusing to users.
     # These come from system plugins (IBus, gvfs, xapp) with GLib version mismatches.
-    _os.environ.setdefault("GTK_MODULES", "")           # skip xapp-gtk3-module etc.
+    _os.environ.setdefault("GTK_MODULES", "")  # skip xapp-gtk3-module etc.
     _os.environ.setdefault("GTK_IM_MODULE", "gtk-im-context-simple")  # skip IBus IM
-    _os.environ.setdefault("GIO_USE_VFS", "local")      # skip gvfs/dbus VFS plugin
-    _os.environ.setdefault("NO_AT_BRIDGE", "1")         # skip atk-bridge accessibility
+    _os.environ.setdefault("GIO_USE_VFS", "local")  # skip gvfs/dbus VFS plugin
+    _os.environ.setdefault("NO_AT_BRIDGE", "1")  # skip atk-bridge accessibility
 
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--log", default="WARNING", choices=LEVELS)
@@ -263,12 +269,20 @@ def main():
             setting = cmd.get("setting")
             value = cmd.get("value")
             VALID = {
-                "language", "model", "device", "compute_type",
-                "hotkey", "wake_word", "wake_word_threshold", "inject_delay_ms",
+                "language",
+                "model",
+                "device",
+                "compute_type",
+                "hotkey",
+                "wake_word",
+                "wake_word_threshold",
+                "inject_delay_ms",
             }
             REQUIRES_RESTART = {"model", "device", "compute_type"}
             if setting not in VALID:
-                return {"error": f"Unknown setting: {setting!r}. Valid: {sorted(VALID)}"}
+                return {
+                    "error": f"Unknown setting: {setting!r}. Valid: {sorted(VALID)}"
+                }
             if setting == "language":
                 config.language = str(value)
                 transcriber._language = str(value)
@@ -293,6 +307,7 @@ def main():
                     _wakeword_listener = None
                 if value:
                     from .wakeword import WakeWordListener
+
                     _wakeword_listener = WakeWordListener(
                         model_name=config.wake_word,
                         threshold=config.wake_word_threshold,
@@ -305,17 +320,21 @@ def main():
                 existing: dict = {}
                 if config_path.exists():
                     import tomllib
+
                     with open(config_path, "rb") as f:
                         existing = tomllib.load(f)
                 existing[setting] = value
                 config_path.parent.mkdir(parents=True, exist_ok=True)
                 from .settings_dialog import _dump_toml
+
                 config_path.write_text(_dump_toml(existing))
             except Exception:
                 pass
             result: dict = {"ok": True}
             if setting in REQUIRES_RESTART:
-                result["note"] = f"Restart Murmur for the {setting!r} change to take effect."
+                result["note"] = (
+                    f"Restart Murmur for the {setting!r} change to take effect."
+                )
             return result
         elif command == "listen":
             timeout = cmd.get("timeout", 30)
