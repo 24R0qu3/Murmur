@@ -113,7 +113,7 @@ def _start_mcp_mode():
     if not _daemon_running():
         print("Starting Murmur daemon in background…", flush=True)
         subprocess.Popen(
-            [sys.argv[0]],
+            [sys.argv[0], "--headless"],
             start_new_session=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -128,6 +128,7 @@ def _start_mcp_mode():
 
     from murmur_mcp.main import main as mcp_main
 
+    print("Murmur daemon ready.", file=sys.stderr, flush=True)
     mcp_main()
 
 
@@ -165,6 +166,11 @@ def main():
         action="store_true",
         help="Start the MCP server (auto-starts the daemon in background if not running).",
     )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run daemon without overlay or tray icon (used when auto-started by --mcp).",
+    )
     args, _ = parser.parse_known_args()
 
     # Install wake word support and exit if requested
@@ -191,6 +197,9 @@ def main():
 
     print("Loading model...")
     config = load_config()
+    if args.headless:
+        config.overlay = False
+        config.tray = False
     transcriber = Transcriber(config)
     recorder = AudioRecorder()
     _transcribe_lock = threading.Lock()
@@ -235,9 +244,79 @@ def main():
     # ── IPC handler ───────────────────────────────────────────────────────────
 
     def ipc_handler(cmd: dict) -> dict:
+        nonlocal hotkey_listener, _wakeword_listener
         command = cmd.get("cmd")
         if command == "status":
             return {"running": True}
+        elif command == "get_config":
+            return {
+                "model": config.model,
+                "language": config.language,
+                "hotkey": config.hotkey,
+                "device": config.device,
+                "compute_type": config.compute_type,
+                "wake_word": config.wake_word,
+                "wake_word_threshold": config.wake_word_threshold,
+                "inject_delay_ms": config.inject_delay_ms,
+            }
+        elif command == "configure":
+            setting = cmd.get("setting")
+            value = cmd.get("value")
+            VALID = {
+                "language", "model", "device", "compute_type",
+                "hotkey", "wake_word", "wake_word_threshold", "inject_delay_ms",
+            }
+            REQUIRES_RESTART = {"model", "device", "compute_type"}
+            if setting not in VALID:
+                return {"error": f"Unknown setting: {setting!r}. Valid: {sorted(VALID)}"}
+            if setting == "language":
+                config.language = str(value)
+                transcriber._language = str(value)
+            elif setting == "inject_delay_ms":
+                config.inject_delay_ms = int(value)
+            elif setting == "wake_word_threshold":
+                config.wake_word_threshold = float(value)
+            elif setting == "hotkey":
+                config.hotkey = str(value)
+                hotkey_listener.stop()
+                hotkey_listener = HotkeyListener(
+                    key_name=config.hotkey,
+                    on_press=on_press,
+                    on_release=on_release,
+                )
+                hotkey_listener.start()
+            elif setting == "wake_word":
+                config.wake_word = str(value)
+                if _wakeword_listener:
+                    recorder.detach_listener(_wakeword_listener.queue)
+                    _wakeword_listener.stop()
+                    _wakeword_listener = None
+                if value:
+                    from .wakeword import WakeWordListener
+                    _wakeword_listener = WakeWordListener(
+                        model_name=config.wake_word,
+                        threshold=config.wake_word_threshold,
+                    )
+                    _wakeword_listener.start(_on_wake_word)
+                    recorder.attach_listener(_wakeword_listener.queue)
+            else:
+                setattr(config, setting, value)
+            try:
+                existing: dict = {}
+                if config_path.exists():
+                    import tomllib
+                    with open(config_path, "rb") as f:
+                        existing = tomllib.load(f)
+                existing[setting] = value
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+                from .settings_dialog import _dump_toml
+                config_path.write_text(_dump_toml(existing))
+            except Exception:
+                pass
+            result: dict = {"ok": True}
+            if setting in REQUIRES_RESTART:
+                result["note"] = f"Restart Murmur for the {setting!r} change to take effect."
+            return result
         elif command == "listen":
             timeout = cmd.get("timeout", 30)
             silence_duration = cmd.get("silence_duration", 1.5)
