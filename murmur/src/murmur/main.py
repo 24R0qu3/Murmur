@@ -210,7 +210,9 @@ def main():
     recorder = AudioRecorder()
     _transcribe_lock = threading.Lock()
 
-    print("Ready.")
+    from murmur import __version__
+
+    print(f"Murmur v{__version__} — ready.")
     print()
     device_label = transcriber.device
     if transcriber._auto_detected:
