@@ -20,12 +20,14 @@ _COLLECT_PKGS = [
     "av",
     "numpy",
     "wx",
+    "mcp",
 ]
 
 datas:         list = []
 binaries:      list = []
 hiddenimports: list = [
     "tomllib", "wave",
+    "murmur_mcp", "murmur_mcp.main", "murmur_mcp.ipc_client",
     # Full stdlib packages needed by openwakeword's dependency chain (requests,
     # tqdm, …) that PyInstaller does not detect automatically from the main app:
     "http", "http.client", "http.cookies", "http.cookiejar",

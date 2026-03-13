@@ -161,7 +161,32 @@ jobs:
           \`\`\`bash
           murmur --install-wakeword
           \`\`\`
-          Then add \`wake_word = \"hey_jarvis\"\` to your config." \
+          Then add \`wake_word = \"hey_jarvis\"\` to your config.
+
+          ## Claude Code MCP integration
+
+          Murmur doubles as an MCP server — the same binary, started with \`--mcp\`:
+
+          \`\`\`bash
+          murmur --mcp
+          \`\`\`
+
+          The daemon starts automatically in the background if it is not already running.
+
+          Add it to Claude Code (\`~/.claude/claude_desktop_config.json\` or via \`claude mcp add\`):
+
+          \`\`\`json
+          {
+            \"mcpServers\": {
+              \"murmur\": {
+                \"command\": \"/path/to/murmur\",
+                \"args\": [\"--mcp\"]
+              }
+            }
+          }
+          \`\`\`
+
+          On Windows replace the path with the full path to \`murmur.exe\`." \
             || true
           gh release upload "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
