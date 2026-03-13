@@ -7,7 +7,7 @@ Usage:
     uv run pyinstaller murmur.spec --noconfirm
 """
 import sys
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # ── Collect packages that use dynamic imports / native extensions ─────────────
 
@@ -20,7 +20,6 @@ _COLLECT_PKGS = [
     "av",
     "numpy",
     "wx",
-    "mcp",
 ]
 
 datas:         list = []
@@ -28,6 +27,7 @@ binaries:      list = []
 hiddenimports: list = [
     "tomllib", "wave",
     "murmur_mcp", "murmur_mcp.main", "murmur_mcp.ipc_client",
+    "anyio._backends._asyncio",
     # Full stdlib packages needed by openwakeword's dependency chain (requests,
     # tqdm, …) that PyInstaller does not detect automatically from the main app:
     "http", "http.client", "http.cookies", "http.cookiejar",
@@ -44,6 +44,15 @@ for _pkg in _COLLECT_PKGS:
         datas         += _d
         binaries      += _b
         hiddenimports += _h
+    except Exception:
+        pass
+
+# mcp and its async stack need explicit submodule collection because they are
+# only imported inside a function body (_start_mcp_mode) and PyInstaller's
+# static analysis won't trace them automatically.
+for _pkg in ["mcp", "anyio", "httpx", "httpcore", "starlette"]:
+    try:
+        hiddenimports += collect_submodules(_pkg)
     except Exception:
         pass
 
