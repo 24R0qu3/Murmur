@@ -102,10 +102,11 @@ For most people, `base` is the sweet spot. If you have a GPU, `large-v3` is noti
 Settings are saved to **`~/.config/murmur/config.toml`** (Linux) or **`%APPDATA%\murmur\config.toml`** (Windows). You can also edit it directly:
 
 ```toml
-model           = "base"
-language        = "en"    # leave "" to auto-detect the spoken language
-hotkey          = "F9"
-inject_delay_ms = 0       # increase (e.g. 50) if text gets cut off in some apps
+model              = "base"
+language           = "en"    # leave "" to auto-detect the spoken language
+hotkey             = "F9"
+inject_delay_ms    = 0       # increase (e.g. 50) if text gets cut off in some apps
+max_record_seconds = 120     # auto-stop a hold-to-record that never gets a key-up
 ```
 
 ---
