@@ -2,6 +2,7 @@ import argparse
 import itertools
 import shutil
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -11,7 +12,7 @@ from .audio import AudioRecorder
 from .config import load_config
 from .cuda_installer import install_cuda
 from .hotkey import HotkeyListener
-from .inject import inject_text
+from .inject import detect_platform, inject_text
 from .ipc import IPCServer
 from .log import setup as _log_setup
 from .transcribe import Transcriber
@@ -28,6 +29,29 @@ _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 def _level_bar(rms: float) -> str:
     filled = int(min(rms / _BAR_SCALE, 1.0) * _BAR_WIDTH)
     return "█" * filled + "░" * (_BAR_WIDTH - filled)
+
+
+def _inject_guarded(text: str, delay_ms: int) -> None:
+    """Inject *text*, surviving a missing or failing injection tool.
+
+    Never raises: the daemon thread that calls this must not die on a missing
+    xdotool/ydotool binary (``FileNotFoundError``) or a non-zero exit
+    (``CalledProcessError``), which would lose the text and leave the UI stuck.
+    """
+    tool = "ydotool" if detect_platform() == "wayland" else "xdotool"
+    try:
+        inject_text(text, delay_ms=delay_ms)
+    except FileNotFoundError:
+        print(
+            f"\r  ERROR: {tool} not found — install it with: "
+            f"sudo apt install {tool}{' ' * 10}"
+        )
+    except subprocess.CalledProcessError as e:
+        print(
+            f"\r  ERROR: text injection failed ({tool} exited {e.returncode}){' ' * 10}"
+        )
+    except Exception as e:  # last resort — keep the daemon thread alive
+        print(f"\r  ERROR: text injection failed ({e}){' ' * 10}")
 
 
 def _run_recording_display(stop: threading.Event, recorder: AudioRecorder):
@@ -229,6 +253,12 @@ def main():
 
     _anim: dict = {}
     _is_recording = threading.Event()
+    # Guards the record start/stop transition so a watchdog auto-stop and a real
+    # key-release can never both finish the same hold (no double-finish), and so
+    # start_recording()/its generation are set atomically with _is_recording.
+    _state_lock = threading.Lock()
+    _record_gen = {"id": 0}  # generation id of the active hotkey recording
+    _record_ended = {"ev": None}  # Event that wakes the watchdog when done
     _shutdown = threading.Event()
     _overlay = None  # OverlayWindow | None
     _wakeword_listener = None  # WakeWordListener | None
@@ -371,16 +401,20 @@ def main():
 
     # ── Hotkey callbacks ──────────────────────────────────────────────────────
 
-    def on_press():
-        if _is_recording.is_set():
-            return
-        _is_recording.set()
+    def on_press(start_watchdog: bool = True):
+        with _state_lock:
+            if _is_recording.is_set():
+                return
+            _is_recording.set()
+            gen = recorder.start_recording()
+            _record_gen["id"] = gen
+            ended = threading.Event()
+            _record_ended["ev"] = ended
         _set_state("recording")
         if _overlay is not None:
             import wx
 
             wx.CallAfter(_overlay.raise_to_front)
-        recorder.start_recording()
         stop = threading.Event()
         _anim["stop"] = stop
         threading.Thread(
@@ -388,15 +422,46 @@ def main():
             args=(stop, recorder),
             daemon=True,
         ).start()
+        if start_watchdog:
+            threading.Thread(
+                target=_record_watchdog,
+                args=(gen, ended),
+                daemon=True,
+            ).start()
 
-    def _finish():
+    def _claim_finish(gen: int) -> bool:
+        """Atomically claim the finish for generation *gen*.
+
+        Returns True only for the single caller (key-release *or* watchdog)
+        that transitions the hold out of recording; every other caller,
+        including the stale key-release after a watchdog auto-stop, gets False.
+        """
+        with _state_lock:
+            if not _is_recording.is_set() or _record_gen["id"] != gen:
+                return False
+            _is_recording.clear()
+            return True
+
+    def _record_watchdog(gen: int, ended: threading.Event):
+        # Wake early when the hold ends normally; otherwise fire after the cap.
+        if ended.wait(timeout=config.max_record_seconds):
+            return
+        if not _claim_finish(gen):
+            return
+        print(
+            f"\r  Recording auto-stopped after {config.max_record_seconds}s{' ' * 10}",
+            flush=True,
+        )
+        _finish(gen)
+
+    def _finish(gen: int):
         stop = _anim.pop("stop", None)
         if stop:
             stop.set()
         _set_state("transcribing")
         print(f"\r◼  Transcribing …{' ' * (_BAR_WIDTH + 12)}", flush=True)
         with _transcribe_lock:
-            audio = recorder.stop_and_get()
+            audio = recorder.stop_and_get(gen)
             try:
                 text = transcriber.transcribe(audio)
             except Exception as e:
@@ -415,17 +480,25 @@ def main():
                     return
         if text:
             print(f"\r→  {text}{' ' * 10}")
-            inject_text(text, delay_ms=config.inject_delay_ms)
-            _push_transcription(text)
+            # Always land back on idle and keep the text in the overlay history,
+            # even if injection fails — _inject_guarded never raises, and the
+            # finally guarantees the UI is never left stuck on "transcribing".
+            try:
+                _inject_guarded(text, config.inject_delay_ms)
+            finally:
+                _push_transcription(text)
         else:
             print(f"\r   (nothing recognised){' ' * 10}")
             _set_state("idle")
 
     def on_release():
-        if not _is_recording.is_set():
+        gen = _record_gen["id"]
+        if not _claim_finish(gen):
             return
-        _is_recording.clear()
-        threading.Thread(target=_finish, daemon=True).start()
+        ended = _record_ended.get("ev")
+        if ended is not None:
+            ended.set()  # wake the watchdog so it exits instead of firing later
+        threading.Thread(target=_finish, args=(gen,), daemon=True).start()
 
     # ── IPC + hotkey ──────────────────────────────────────────────────────────
 
@@ -444,7 +517,9 @@ def main():
     def _on_wake_word():
         if not _is_recording.is_set():
             print("\n  Hello! Wake word detected — recording…", flush=True)
-            on_press()
+            # No hotkey watchdog here: record_until_silence() already caps the
+            # wake-word recording via its own max_seconds.
+            on_press(start_watchdog=False)
             threading.Thread(target=_wake_word_finish, daemon=True).start()
 
     def _wake_word_finish():
@@ -467,10 +542,15 @@ def main():
                 _is_recording.clear()
                 return
         _is_recording.clear()
+        ended = _record_ended.get("ev")
+        if ended is not None:
+            ended.set()
         if text:
             print(f"\r→  {text}{' ' * 10}")
-            inject_text(text, delay_ms=config.inject_delay_ms)
-            _push_transcription(text)
+            try:
+                _inject_guarded(text, config.inject_delay_ms)
+            finally:
+                _push_transcription(text)
         else:
             print(f"\r   (nothing recognised){' ' * 10}")
             _set_state("idle")

@@ -89,6 +89,10 @@ class AudioRecorder:
         self._frames: list[np.ndarray] = []
         self._lock = threading.Lock()
         self._recording = False
+        # Monotonic id of the current recording session. A stop that carries a
+        # stale generation is ignored, so a fast key re-press cannot let the
+        # previous recording's finisher kill a newer recording.
+        self._generation = 0
         self._listeners: list["queue.Queue"] = []
         self._stream = sd.InputStream(
             samplerate=_RATE,
@@ -132,19 +136,30 @@ class AudioRecorder:
 
     # ── hotkey path ───────────────────────────────────────────────────────────
 
-    def start_recording(self):
+    def start_recording(self) -> int:
+        """Begin a new recording session and return its generation id.
+
+        Pass the returned id back to :meth:`stop_and_get` so a stale finisher
+        cannot stop a recording that a later press already started.
+        """
         with self._lock:
             self._frames = []
-        self._recording = True
+            self._generation += 1
+            self._recording = True
+            return self._generation
 
     def close(self):
         self._recording = False
         self._stream.stop()
         self._stream.close()
 
-    def stop_and_get(self) -> np.ndarray:
-        self._recording = False
+    def stop_and_get(self, generation: int | None = None) -> np.ndarray:
         with self._lock:
+            if generation is not None and generation != self._generation:
+                # A newer recording has superseded this one; leave it running
+                # and return nothing for the stale generation.
+                return np.zeros(0, dtype=np.float32)
+            self._recording = False
             if not self._frames:
                 return np.zeros(0, dtype=np.float32)
             raw = np.concatenate(self._frames, axis=0).flatten()
@@ -160,7 +175,8 @@ class AudioRecorder:
     ) -> np.ndarray:
         with self._lock:
             self._frames = []
-        self._recording = True
+            self._generation += 1
+            self._recording = True
 
         chunks_per_second = 10
         silence_chunks_needed = int(silence_duration * chunks_per_second)
