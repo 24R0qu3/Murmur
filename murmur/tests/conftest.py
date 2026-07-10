@@ -4,8 +4,16 @@ from unittest.mock import MagicMock
 
 # Heavy/hardware backends are not importable on headless CI (pynput needs
 # X11, sounddevice needs an audio stack, faster_whisper is a large ML
-# runtime). The unit tests monkeypatch around them, so stub them here.
-for _mod in ("sounddevice", "pynput", "pynput.keyboard", "faster_whisper"):
+# runtime, pystray probes for a display backend at import time and raises
+# Xlib.error.DisplayNameError rather than ImportError when none exists).
+# The unit tests monkeypatch around them, so stub them here.
+for _mod in (
+    "sounddevice",
+    "pynput",
+    "pynput.keyboard",
+    "faster_whisper",
+    "pystray",
+):
     sys.modules.setdefault(_mod, MagicMock())
 
 # On a headless runner there is no input device, so opening an InputStream
