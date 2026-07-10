@@ -13,6 +13,7 @@ class Config:
         "auto"  # "auto" | "int8" | "int8_float32" | "float16" | "float32"
     )
     inject_delay_ms: int = 0
+    max_record_seconds: int = 120  # hotkey watchdog: auto-stop a stuck hold
     tray: bool = True
     overlay: bool = True
     overlay_always_on_top: bool = True
@@ -40,6 +41,9 @@ def load_config() -> Config:
         device=data.get("device", defaults.device),
         compute_type=data.get("compute_type", defaults.compute_type),
         inject_delay_ms=data.get("inject_delay_ms", defaults.inject_delay_ms),
+        max_record_seconds=data.get(
+            "max_record_seconds", defaults.max_record_seconds
+        ),
         tray=data.get("tray", defaults.tray),
         overlay=data.get("overlay", defaults.overlay),
         overlay_always_on_top=data.get(
