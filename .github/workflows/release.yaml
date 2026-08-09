@@ -28,7 +28,7 @@ jobs:
             dist_file: dist/murmur
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # ── System dependencies ─────────────────────────────────────────────────
       - name: Install system dependencies (Linux)
